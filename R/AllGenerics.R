@@ -1,3 +1,3 @@
-setGeneric("bumphunter", function(object, ...) {
-    standardGeneric("bumphunter")
+setGeneric("MultiTargetBumphunter", function(object, ...) {
+    standardGeneric("MultiTargetBumphunter")
 })

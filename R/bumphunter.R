@@ -1,4 +1,4 @@
-setMethod("bumphunter", signature(object = "matrix"),
+setMethod("MultiTargetBumphunter", signature(object = "matrix"),
           function(object, design, chr=NULL, pos, cluster=NULL,
                    coef=2, cutoff=NULL, pickCutoff=FALSE, pickCutoffQ=0.99,
                    maxGap=500,
@@ -9,7 +9,7 @@ setMethod("bumphunter", signature(object = "matrix"),
               nullMethod  <- match.arg(nullMethod)
               if(missing(design)) stop("design must be specified")
               if(missing(pos)) stop("If object is a matrix, pos must be specified")
-              bumphunterEngine(object, design=design, chr=chr, pos,
+              MultiTargetBumphunterEngine(object, design=design, chr=chr, pos,
                                cluster=cluster,
                                coef=coef,
                                cutoff=cutoff, pickCutoff=pickCutoff,
@@ -23,7 +23,7 @@ setMethod("bumphunter", signature(object = "matrix"),
           })
 
 
-bumphunterEngine<-function(mat, design, chr = NULL, pos,
+MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            cluster = NULL, coef = 2,
                            cutoff = NULL, pickCutoff = FALSE,
                            pickCutoffQ = 0.99,
