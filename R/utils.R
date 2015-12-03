@@ -16,3 +16,16 @@ foreachCleanup <- function() {
         remove(".revoDoParCluster", envir=doParallel:::.options)
     }
 }
+
+getLengthMatrixOrVector <- function(x)
+{
+  if (is.null(dim(x)))
+  {
+    # This is probably a vector
+    res <- length(x)
+  } else {
+    # This is probably a matrix
+    res <- nrow(x)
+  }
+  return(res)
+}

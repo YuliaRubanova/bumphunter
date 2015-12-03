@@ -1,3 +1,5 @@
+library(doRNG)
+
 setMethod("MultiTargetBumphunter", signature(object = "matrix"),
           function(object, design, chr=NULL, pos, cluster=NULL,
                    coef=2, cutoff=NULL, pickCutoff=FALSE, pickCutoffQ=0.99,
@@ -46,9 +48,9 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             B = ncol(permutations)
         }
     }
-     if (ncol(design) > 2 & B > 0 & nullMethod == "permutation"){
-        message("[bumphunterEngine] The use of the permutation test is not recommended with multiple covariates, (ncol(design)>2). Consider changing 'nullMethod' changed to 'bootstrap' instead. See vignette for more information.")
-        warning("The use of the permutation test is not recommended with multiple covariates, (ncol(design)>2). Consider changing 'nullMethod' changed to 'bootstrap' instead. See vignette for more information.")
+     if (ncol(design[,-coef]) > 1 & B > 0 & nullMethod == "permutation"){
+        message("[bumphunterEngine] The use of the permutation test is not recommended with multiple covariates, (ncol(design[,-coef]) > 1). Consider changing 'nullMethod' changed to 'bootstrap' instead. See vignette for more information.")
+        warning("The use of the permutation test is not recommended with multiple covariates, (ncol(design[,-coef]) > 1). Consider changing 'nullMethod' changed to 'bootstrap' instead. See vignette for more information.")
     }
     if (!is.matrix(mat))
         stop("'mat' must be a matrix.")
@@ -95,13 +97,13 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     if (verbose)
         message("[bumphunterEngine] Computing coefficients.")
     if (useWeights & smooth) { 
-        tmp <- .getEstimate(mat = mat, design = design,
+        tmp <- MultiTargetGetEstimate(mat = mat, design = design,
                             coef = coef, full = TRUE)
         rawBeta <- tmp$coef
         weights <- tmp$sigma
         rm(tmp)
     } else {
-        rawBeta <- .getEstimate(mat = mat, design = design, coef = coef,
+        rawBeta <- MultiTargetGetEstimate(mat = mat, design = design, coef = coef,
             full = FALSE)
         weights <- NULL
     }
@@ -115,21 +117,21 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         beta <- beta$fitted
     } else {
         beta <- rawBeta
-        Index <- seq(along = beta)
+        Index <- seq(getLengthMatrixOrVector(beta))
     }
     if (B > 0) {
         if (nullMethod == "permutation"){
             if (verbose)
                 message("[bumphunterEngine] Performing ", B, " permutations.")
             if (useWeights && smooth) {
-                tmp <- .getEstimate(mat, design, coef, B,
+                tmp <- MultiTargetGetEstimate(mat, design, coef, B,
                                     permutations, full = TRUE)
                 permRawBeta <- tmp$coef
                 weights <- tmp$sigma
                 rm(tmp)
             }
             else {
-                permRawBeta <- .getEstimate(mat, design, coef, B, permutations, full = FALSE)
+                permRawBeta <- MultiTargetGetEstimate(mat, design, coef, B, permutations, full = FALSE)
                 weights <- NULL
             }
             NullBeta<-permRawBeta	
@@ -154,13 +156,16 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             
             tmp <- foreach(bootstraps = iter(bootIndexes, by = "column", chunksize = chunksize),
                            .combine = "cbind", .packages = "bumphunter") %dorng% {
-                               apply(bootstraps, 2, function(bootIndex){
+                          
+                             do.call(cbind, lapply(as.list(data.frame(bootstraps)), function(bootIndex){
                                    ##create a null model
                                    matstar <- null+resids[,bootIndex]
                                    ##compute the null beta estimate
-                                   nullbetas <- backsolve(qr.R(qr.X),crossprod(qr.Q(qr.X),t(matstar)))[coef,]
+                                   nullbetas <- t(backsolve(qr.R(qr.X),crossprod(qr.Q(qr.X),t(matstar)))[coef,])
                                    if (useWeights){
                                        ##compute sigma
+                                     
+                                      # !!! modify sigma here?
                                        sigma <- rowSums(t(tcrossprod( diag(nrow(design)) - tcrossprod(qr.Q(qr.X)),  matstar))^2)
                                        sigma <-
                                            sqrt(sigma/(nrow(design)-qr.X$rank))
@@ -169,10 +174,11 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                                        outList <- nullbetas
                                    }
                                    return(outList)
-                               })
+                               }))
                            }
             
             if (useWeights && smooth) {
+                # !!! Make sure that this works!
                 bootRawBeta <- do.call(Map, c(cbind, tmp))$coef
                 weights <- do.call(Map, c(cbind, tmp))$sigma
             } else {
@@ -203,39 +209,50 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     }
     if (verbose)
         message("[bumphunterEngine] Finding regions.")
-    tab <- regionFinder(x = beta, chr = chr, pos = pos, cluster = cluster,
+    tabs <- list()
+    for (j in 1:length(coef))
+    {
+      tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
         cutoff = cutoff, ind = Index, verbose = FALSE)
-    if (nrow(tab) == 0) {
-        if (verbose)
-            message("[bumphunterEngine] No bumps found!")
-        return(list(table = NA, coef = rawBeta, fitted = beta,
-            pvaluesMarginal = NA))
-    } else {
-        if (verbose)
-            message(sprintf("[bumphunterEngine] Found %s bumps.",
-                nrow(tab)))
-    }
-    if (B < 1) {
-        return(list(table = tab, coef = rawBeta, fitted = beta,
-            pvaluesMarginal = NA))
+    
+      if (nrow(tabs[[j]]) == 0) {
+          if (verbose)
+              message("[bumphunterEngine] No bumps found!")
+          return(list(table = NA, coef = rawBeta, fitted = beta,
+              pvaluesMarginal = NA))
+      } else {
+          if (verbose)
+              message(sprintf("[bumphunterEngine] Found %s bumps.",
+                  nrow(tabs[[j]])))
+      }
+    
+      if (B < 1) {
+          return(list(table = tabs[[j]], coef = rawBeta, fitted = beta,
+              pvaluesMarginal = NA))
+      }
     }
     if (verbose)
         message("[bumphunterEngine] Computing regions for each ",nullMethod,".")
     chunksize <- ceiling(B/workers)
     subMat <- NULL
+    
     nulltabs <- foreach(subMat = iter(permBeta, by = "col", chunksize = chunksize),
-        .combine = "c", .packages = "bumphunter") %dorng% {
-        apply(subMat, 2, regionFinder, chr = chr, pos = pos,
-            cluster = cluster, cutoff = cutoff, ind = Index,
-            verbose = FALSE)
-    }
-    attributes(nulltabs)[["rng"]] <- NULL
+          .combine = "c", .packages = "bumphunter") %dorng% {
+          apply(subMat, 2, regionFinder, chr = chr, pos = pos,
+              cluster = cluster, cutoff = cutoff, ind = Index,
+              verbose = FALSE)
+      }
+    attributes(nulltabs[[j]])[["rng"]] <- NULL
+    
     if (verbose)
         message("[bumphunterEngine] Estimating p-values and FWER.")
-    L <- V <- A <- as.list(rep(0, B))
-    for (i in 1:B) {
+    L <- V <- A <- as.list(rep(0, B * length(coef)))
+    for (i in 1:(B * length(coef))) {
         nulltab <- nulltabs[[i]]
         if (nrow(nulltab) > 0) {
+            # Values per permutation
+            # If there are n covariates of interest, 
+            # then every n-th permutation corresponds to the n-th covariate
             L[[i]] <- nulltab$L
             V[[i]] <- nulltab$value
             A[[i]] <- nulltab$area
@@ -248,7 +265,13 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         tots <- foreach(subL = iter(Lvalue, by = "row", chunksize = chunksize),
                         .combine = "cbind", .packages = "bumphunter") %dorng%
         {
+                greaterOrEqual <- function(x,y) {
+                  precision <- sqrt(.Machine$double.eps)
+                  (x >= y) | (abs(x-y) <= precision)
+                }
+          
                 apply(subL, 1, function(x) {
+                  # !!! fix seq(along = V) here
                     res <- sapply(seq(along = V), function(i) {
                       sum(greaterOrEqual(L[[i]], x[1]) &
                           greaterOrEqual(abs(V[[i]]),
@@ -263,46 +286,61 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         return(list(rate1 = rate1, pvalues1 = pvalues1))
     }
 ##    ptime1 <- proc.time()
-    comp <- computation.tots(tab = tab, V = V, L = L)
-    rate1 <- comp$rate1
-    pvalues1 <- comp$pvalues1
-##    ptime2 <- proc.time()
-    computation.tots2 <- function(tab, A) {
-        Avalue <- matrix(tab$area, ncol = 1)
-        chunksize <- ceiling(nrow(Avalue)/workers)
-        subA <- NULL
-        tots2 <- t(foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
-            .combine = "cbind", .packages = "bumphunter") %dorng%
-            {
-                sapply(subA, function(x) {
-                  return(sapply(seq(along = A), function(i) {
-                    sum(greaterOrEqual(A[[i]], x[1]))
-                  }))
-                })
-            })
-        if (is.vector(tots2)) {
-            tots2 <- matrix(tots2, nrow = 1)
-        }
-        rate2 <- rowMeans(tots2 > 0)
-        pvalues2 <- rowSums(tots2)/sum(sapply(nulltabs, nrow))
-        return(list(rate2 = rate2, pvalues2 = pvalues2))
+    for (j in 1:length(coef))
+    {
+      tab <- tabs[[j]]
+      indices <- seq(1, ncol(permBeta), length(coef)) + j -1
+      # If there are n covariates of interest, 
+      # then every n-th permutation in V and L corresponds to the n-th covariate
+      
+      comp <- computation.tots(tab = tab, V = V[indices], L = L[indices])
+      rate1 <- comp$rate1
+      pvalues1 <- comp$pvalues1
+  ##    ptime2 <- proc.time()
+      computation.tots2 <- function(tab, A) {
+          Avalue <- matrix(tab$area, ncol = 1)
+          chunksize <- ceiling(nrow(Avalue)/workers)
+          subA <- NULL
+          tots2 <- t(foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
+              .combine = "cbind", .packages = "bumphunter") %dorng%
+              {
+                  greaterOrEqual <- function(x,y) {
+                    precision <- sqrt(.Machine$double.eps)
+                    (x >= y) | (abs(x-y) <= precision)
+                  }
+                  
+                  sapply(subA, function(x) {
+                    # !!! fix along = A here
+                    return(sapply(seq(along = A), function(i) {
+                      sum(greaterOrEqual(A[[i]], x[1]))
+                    }))
+                  })
+              })
+          if (is.vector(tots2)) {
+              tots2 <- matrix(tots2, nrow = 1)
+          }
+          rate2 <- rowMeans(tots2 > 0)
+          pvalues2 <- rowSums(tots2)/sum(sapply(nulltabs, nrow))
+          return(list(rate2 = rate2, pvalues2 = pvalues2))
+      }
+      ##ptime1 <- proc.time()
+      comp <- computation.tots2(tab = tab, A = A[indices])
+      rate2 <- comp$rate2
+      pvalues2 <- comp$pvalues2
+      ##ptime2 <- proc.time()
+      tab$p.value <- pvalues1
+      tab$fwer <- rate1
+      tab$p.valueArea <- pvalues2
+      tab$fwerArea <- rate2
+      tab <- tab[order(tab$fwer, -tab$area), ]
+      tabs[[j]] <- tab
     }
-    ##ptime1 <- proc.time()
-    comp <- computation.tots2(tab = tab, A = A)
-    rate2 <- comp$rate2
-    pvalues2 <- comp$pvalues2
-    ##ptime2 <- proc.time()
-    tab$p.value <- pvalues1
-    tab$fwer <- rate1
-    tab$p.valueArea <- pvalues2
-    tab$fwerArea <- rate2
-    tab <- tab[order(tab$fwer, -tab$area), ]
     algorithm <- list(version = packageDescription("bumphunter")$Version,
         coef = coef, cutoff = cutoff, pickCutoff = pickCutoff,
         pickCutoffQ = pickCutoffQ, smooth = smooth, maxGap = maxGap, nullMethod=nullMethod,
         B = B, permutations = permutations, useWeights = useWeights,
         smoothFunction = deparse(substitute(smoothFunction)))
-    ret <- list(table = tab, coef = rawBeta, fitted = beta, pvaluesMarginal = pvs,
+    ret <- list(table = tabs, coef = rawBeta, fitted = beta, pvaluesMarginal = pvs,
         null = list(value = V, length = L), algorithm = algorithm)
     class(ret) <- "bumps"
     return(ret)

@@ -89,7 +89,7 @@ locfitByCluster <- function(y, x = NULL, cluster, weights = NULL,
             smoothed[Index] <- FALSE
         }
     }                
-    return(list(fitted=y, smoothed=smoothed, smoother="locfit"))
+    return(list(fitted=as.matrix(y), smoothed=smoothed, smoother="locfit"))
 }
 
 loessByCluster <- function(y, x=NULL, cluster, weights= NULL,

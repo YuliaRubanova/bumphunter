@@ -1,23 +1,29 @@
-.getEstimate <- function(mat, design, coef, B=NULL, permutations=NULL,
+MultiTargetGetEstimate <- function(mat, design, coef, B=NULL, permutations=NULL,
                          full=FALSE) {
     v <- design[,coef]
     A <- design[,-coef, drop=FALSE]
     qa <- qr(A)
     S <- diag(nrow(A)) - tcrossprod(qr.Q(qa))
 
-    vv <- if (is.null(B)) matrix(v, ncol=1) else{
+    vv <- if (is.null(B)) as.matrix(v) else{
         if(is.null(permutations)){
-            replicate(B, sample(v))
+            if (length(coef) == 1)
+            {
+              replicate(B, sample(v))
+            } else {
+              do.call(cbind, replicate(B, v[sample(nrow(v)),], simplify=F))
+            }
         } else{
             apply(permutations,2,function(i) v[i])
         }
     }
-            
-            
+    
     sv <- S %*% vv
+
     vsv <- diag(crossprod(vv,sv))
     
     b <- (mat %*% crossprod(S, vv)) / vsv
+    
     if(!is.matrix(b))
         b <- matrix(b, ncol = 1)
     if (full) {
@@ -34,18 +40,18 @@
             }
             sigma <- sqrt(sigma/df.residual)
         }
-        out <- list(coef=b,
+        out <- list(coef=as.matrix(b),
                     sigma=sigma,
                     stdev.unscaled=sqrt(1/vsv),
                     df.residual=df.residual)
         if (is.null(B)) out$stdev <- as.numeric(out$stdev)
     } else {
-        out <- b
+        out <- as.matrix(b)
     }
-    return(out)
+  return(out)
 }
 
-.getModT <- function(obj) {
+MultiTargetGetModT <- function(obj) {
     s2 <- apply(obj$sigma^2, 2, limma::squeezeVar, obj$df.residual)
     out <- obj$coef
     for (j in 1:ncol(out)) {
