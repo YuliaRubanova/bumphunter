@@ -7,7 +7,7 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                    nullMethod=c("permutation","bootstrap"), smooth=FALSE,
                    smoothFunction=locfitByCluster,
                    useWeights=FALSE, B=ncol(permutations), permutations=NULL,
-                   verbose=TRUE, ...){
+                   verbose=TRUE, nullmodel_coef=NULL, ...){
               nullMethod  <- match.arg(nullMethod)
               if(missing(design)) stop("design must be specified")
               if(missing(pos)) stop("If object is a matrix, pos must be specified")
@@ -21,7 +21,8 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                                smoothFunction=smoothFunction,
                                useWeights=useWeights, B=B,
                                permutations=NULL,
-                               verbose=verbose, ...)
+                               verbose=verbose, 
+                               nullmodel_coef=nullmodel_coef, ...)
           })
 
 
@@ -36,7 +37,8 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            useWeights = FALSE,
                            B = ncol(permutations),
                            permutations = NULL,
-                           verbose = TRUE, ...){
+                           verbose = TRUE, 
+                           nullmodel_coef = NULL, ...){
     nullMethod  <- match.arg(nullMethod)
     if (is.null(B))  B = 0
     if (!is.matrix(permutations) & !is.null(permutations)) stop("permutations must be NULL or a matrix.")
@@ -119,8 +121,28 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         beta <- rawBeta
         Index <- seq(getLengthMatrixOrVector(beta))
     }
+    if (!is.null(nullmodel_coef))
+      B = 1
     if (B > 0) {
-        if (nullMethod == "permutation"){
+      if (!is.null(nullmodel_coef)){
+        if (verbose)
+          message("[bumphunterEngine] Performing ", B, " permutations with nullmodel coefficients")
+#         if (useWeights && smooth) {
+#           tmp <- MultiTargetGetEstimate(mat, design, coef, B,
+#                                         permutations, full = TRUE)
+#           permRawBeta <- tmp$coef
+#           weights <- tmp$sigma
+#           rm(tmp)
+#         }
+#         else {
+          middle <- ceiling(length(nullmodel_coef)/2)
+          design_null <- rbind(matrix(1, nrow=middle, ncol=length(coef)), matrix(-1, nrow=(length(nullmodel_coef)-middle), ncol=length(coef)))
+          permRawBeta <- MultiTargetGetEstimate(mat[,nullmodel_coef], design_null, coef, full = FALSE)
+          weights <- NULL
+      #}
+          NullBeta<-permRawBeta  
+        } else {
+          if (nullMethod == "permutation"){
             if (verbose)
                 message("[bumphunterEngine] Performing ", B, " permutations.")
             if (useWeights && smooth) {
@@ -188,7 +210,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             NullBeta<-bootRawBeta
             rm(tmp)
             rm(bootRawBeta)
-        }	
+        }}
         if (verbose)
             message("[bumphunterEngine] Computing marginal ",nullMethod," p-values.")
         sumGreaterOrEqual <- rowSums(greaterOrEqual(abs(NullBeta),
@@ -285,6 +307,35 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         pvalues1 <- tots[2, ]/sum(sapply(nulltabs, nrow))
         return(list(rate1 = rate1, pvalues1 = pvalues1))
     }
+    computation.tots2 <- function(tab, A) {
+      Avalue <- matrix(tab$area, ncol = 1)
+      chunksize <- ceiling(nrow(Avalue)/workers)
+      subA <- NULL
+      tots2 <- t(foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
+                         .combine = "cbind", .packages = "bumphunter") %dorng%
+            {
+              greaterOrEqual <- function(x,y) {
+                precision <- sqrt(.Machine$double.eps)
+                (x >= y) | (abs(x-y) <= precision)
+            }
+            
+              t(as.matrix(sapply(subA, function(x) {
+                # !!! fix along = A here
+                return(as.matrix(sapply(seq(along = A), function(i) {
+                  sum(greaterOrEqual(A[[i]], x[1]))
+                })))
+              })))
+
+          })
+      
+      if (is.vector(tots2)) {
+        tots2 <- matrix(tots2, nrow = 1)
+      }
+      rate2 <- rowMeans(tots2 > 0)
+      pvalues2 <- rowSums(tots2)/sum(sapply(nulltabs, nrow))
+      return(list(rate2 = rate2, pvalues2 = pvalues2))
+    }
+
 ##    ptime1 <- proc.time()
     for (j in 1:length(coef))
     {
@@ -297,32 +348,6 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
       rate1 <- comp$rate1
       pvalues1 <- comp$pvalues1
   ##    ptime2 <- proc.time()
-      computation.tots2 <- function(tab, A) {
-          Avalue <- matrix(tab$area, ncol = 1)
-          chunksize <- ceiling(nrow(Avalue)/workers)
-          subA <- NULL
-          tots2 <- t(foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
-              .combine = "cbind", .packages = "bumphunter") %dorng%
-              {
-                  greaterOrEqual <- function(x,y) {
-                    precision <- sqrt(.Machine$double.eps)
-                    (x >= y) | (abs(x-y) <= precision)
-                  }
-                  
-                  sapply(subA, function(x) {
-                    # !!! fix along = A here
-                    return(sapply(seq(along = A), function(i) {
-                      sum(greaterOrEqual(A[[i]], x[1]))
-                    }))
-                  })
-              })
-          if (is.vector(tots2)) {
-              tots2 <- matrix(tots2, nrow = 1)
-          }
-          rate2 <- rowMeans(tots2 > 0)
-          pvalues2 <- rowSums(tots2)/sum(sapply(nulltabs, nrow))
-          return(list(rate2 = rate2, pvalues2 = pvalues2))
-      }
       ##ptime1 <- proc.time()
       comp <- computation.tots2(tab = tab, A = A[indices])
       rate2 <- comp$rate2
