@@ -7,7 +7,9 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                    nullMethod=c("permutation","bootstrap"), smooth=FALSE,
                    smoothFunction=locfitByCluster,
                    useWeights=FALSE, B=ncol(permutations), permutations=NULL,
-                   verbose=TRUE, nullmodel_coef=NULL, ...){
+                   verbose=TRUE, nullmodel_coef=NULL, computePValuesJointly = F, 
+                   bumpDirections = NULL, 
+                   SamplesToDetermineDirection = NULL, ...){
               nullMethod  <- match.arg(nullMethod)
               if(missing(design)) stop("design must be specified")
               if(missing(pos)) stop("If object is a matrix, pos must be specified")
@@ -22,7 +24,10 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                                useWeights=useWeights, B=B,
                                permutations=NULL,
                                verbose=verbose, 
-                               nullmodel_coef=nullmodel_coef, ...)
+                               nullmodel_coef=nullmodel_coef, 
+                               computePValuesJointly = F, 
+                               bumpDirections = NULL, 
+                               SamplesToDetermineDirection = NULL, ...)
           })
 
 
@@ -38,7 +43,10 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            B = ncol(permutations),
                            permutations = NULL,
                            verbose = TRUE, 
-                           nullmodel_coef = NULL, ...){
+                           nullmodel_coef = NULL, 
+                           computePValuesJointly = F, 
+                           bumpDirections = NULL, 
+                           SamplesToDetermineDirection = NULL, ...){
     nullMethod  <- match.arg(nullMethod)
     if (is.null(B))  B = 0
     if (!is.matrix(permutations) & !is.null(permutations)) stop("permutations must be NULL or a matrix.")
@@ -122,8 +130,8 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         Index <- seq(getLengthMatrixOrVector(beta))
     }
     if (!is.null(nullmodel_coef))
-      B = 1
-    if (B > 0) {
+        B = 1
+    if (B > 0 || !is.null(nullmodel_coef)) {
       if (!is.null(nullmodel_coef)){
         if (verbose)
           message("[bumphunterEngine] Performing ", B, " permutations with nullmodel coefficients")
@@ -135,9 +143,13 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
 #           rm(tmp)
 #         }
 #         else {
-          middle <- ceiling(length(nullmodel_coef)/2)
-          design_null <- rbind(matrix(1, nrow=middle, ncol=length(coef)), matrix(-1, nrow=(length(nullmodel_coef)-middle), ncol=length(coef)))
-          permRawBeta <- MultiTargetGetEstimate(mat[,nullmodel_coef], design_null, coef, full = FALSE)
+          
+          null_model_matrix <- rep(nullmodel_coef, ceiling((nrow(design)- length(nullmodel_coef))/ length(nullmodel_coef)))[1:(nrow(design)- length(nullmodel_coef))]
+          null_model_matrix <- c(null_model_matrix, nullmodel_coef)
+          null_model_matrix <- mat[, null_model_matrix]
+
+          permRawBeta <- MultiTargetGetEstimate(null_model_matrix, design, coef, full = FALSE)
+          #permRawBeta <- MultiTargetGetEstimate(mat[,nullmodel_coef], design_null, coef, B, permutations, full = FALSE)
           weights <- NULL
       #}
           NullBeta<-permRawBeta  
@@ -236,7 +248,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     {
       tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
         cutoff = cutoff, ind = Index, verbose = FALSE)
-    
+        
       if (nrow(tabs[[j]]) == 0) {
           if (verbose)
               message("[bumphunterEngine] No bumps found!")
@@ -311,22 +323,138 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
       Avalue <- matrix(tab$area, ncol = 1)
       chunksize <- ceiling(nrow(Avalue)/workers)
       subA <- NULL
-      tots2 <- t(foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
-                         .combine = "cbind", .packages = "bumphunter") %dorng%
+      tots2 <- foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
+                         .combine = "rbind", .packages = "bumphunter") %dorng%
             {
               greaterOrEqual <- function(x,y) {
                 precision <- sqrt(.Machine$double.eps)
                 (x >= y) | (abs(x-y) <= precision)
+                }
+                
+                toVerticalMatrix <- function(L)
+                {
+                  if (is.vector(L))
+                    return(as.matrix(L, ncol=1))
+                  else 
+                    return(as.matrix(L))
+                }
+            
+            res <- toVerticalMatrix(sapply(subA, function(x) {
+                return(sapply(seq(along = A), function(i) {
+                  sum(greaterOrEqual(A[[i]], x[1]))
+                }))
+              }))
+
+          }
+      
+          if (is.vector(tots2)) {
+            tots2 <- matrix(tots2, nrow = 1)
+          }
+          rate2 <- rowMeans(tots2 > 0)
+          pvalues2 <- rowSums(tots2)/sum(sapply(nulltabs, nrow))
+          return(list(rate2 = rate2, pvalues2 = pvalues2))
+    }
+
+    computation.tots.jointly <- function(tabs, V, L, ZeroDirection, bumpDirections) {
+      res <- findIntersection(tabs)
+      
+      joined_tabs <- res$joined_tabs
+      LvalueList <- res$LvalueList
+      
+      for (i in 1:length(LvalueList))
+      {
+        LvalueList[[i]] <- cbind(LvalueList$L, abs(LvalueList$value))
+      }
+      
+      Ls <- do.call(cbind, sapply(LvalueList, function(x) {x$L}))
+      values <- do.call(cbind, sapply(LvalueList, function(x) {x$value}))
+      Lvalue <- cbind(Ls, values)
+      
+      chunksize <- ceiling(nrow(Lvalue)/workers)
+      subL <- NULL
+      tots <- foreach(subL = iter(Lvalue, by = "row", chunksize = chunksize),
+                      .combine = "cbind", .packages = "bumphunter") %dorng%
+        {
+            greaterOrEqual <- function(x,y) {
+              precision <- sqrt(.Machine$double.eps)
+              (x >= y) | (abs(x-y) <= precision)
             }
             
-              t(as.matrix(sapply(subA, function(x) {
-                # !!! fix along = A here
-                return(as.matrix(sapply(seq(along = A), function(i) {
-                  sum(greaterOrEqual(A[[i]], x[1]))
-                })))
-              })))
-
+          apply(subL, 1, function(x) {
+            # !!! fix seq(along = V) here
+            FoundBumpsLs <- subL[1:(length(subL)/2)]
+            FoundBumpsValues <- subL[(length(subL)/2):length(subL)]
+            
+            if (is.null(ZeroDirection) || is.null(bumpDirections))
+            {
+              correct_direction <- TRUE
+            } else {
+              # Also: add bump shrinking!!!
+              # Add constraints on controls while computing p-value !!!
+              # !!!! Incorrect ???
+#                 correct_direction <- FALSE
+#                 for (j in 1:length(bumpDirections))
+#                 {
+#                   if (sum(bumpDirections[[j]] * FoundBumpsValues < 0) == 0)
+#                   {
+#                     correct_direction = TRUE
+#                     break
+#                   }
+#                 }
+              }
+            
+            
+            
+            
+          BiggerNullBumpIndicesForPermutation <- function(l, v, FoundBumpsLs, FoundBumpsValues, correct_direction)
+            {
+                tmp <- sapply(1:length(FoundBumpsLs), function(j) {
+                  greaterOrEqual(l, FoundBumpsLs[j]) &
+                    greaterOrEqual(abs(v), FoundBumpsValues[j]) & correct_direction
+                  } )
+                return(LogicalAnd(tmp))
+            }
+          
+            res <- sapply(seq(along = V), function(i) {
+              sum(BiggerNullBumpIndicesForPermutation(L[[i]], V[[i]], FoundBumpsLs, FoundBumpsValues, correct_direction))
+            })
+            c(mean(res > 0), sum(res))
           })
+        }
+      attributes(tots)[["rng"]] <- NULL
+      rate1 <- tots[1, ]
+      pvalues1 <- tots[2, ]/sum(sapply(nulltabs, nrow))
+      return(list(rate1 = rate1, pvalues1 = pvalues1))
+    }
+
+    computation.tots2.jointly <- function(tab, A, ZeroDirection, bumpDirections) {
+        Avalue <- matrix(tab$area, ncol = 1)
+        chunksize <- ceiling(nrow(Avalue)/workers)
+        subA <- NULL
+        tots2 <- foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
+                         .combine = "rbind", .packages = "bumphunter") %dorng%
+       {
+          greaterOrEqual <- function(x,y) {
+            precision <- sqrt(.Machine$double.eps)
+            (x >= y) | (abs(x-y) <= precision)
+          }
+          
+        
+        toVerticalMatrix <- function(L)
+        {
+          if (is.vector(L))
+            return(as.matrix(L, ncol=1))
+          else 
+            return(as.matrix(L))
+        }
+        
+        res <- toVerticalMatrix(sapply(subA, function(x) {
+          return(sapply(seq(along = A), function(i) {
+            sum(greaterOrEqual(A[[i]], x[1]))
+          }))
+        }))
+        
+      }
       
       if (is.vector(tots2)) {
         tots2 <- matrix(tots2, nrow = 1)
@@ -337,19 +465,15 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     }
 
 ##    ptime1 <- proc.time()
-    for (j in 1:length(coef))
+    if (computePValuesJointly)
     {
-      tab <- tabs[[j]]
-      indices <- seq(1, ncol(permBeta), length(coef)) + j -1
-      # If there are n covariates of interest, 
-      # then every n-th permutation in V and L corresponds to the n-th covariate
-      
-      comp <- computation.tots(tab = tab, V = V[indices], L = L[indices])
+      new_tabs <- NULLs
+      comp <- computation.tots.jointly(tab = tabs, V = V, L = L, ZeroDirection, bumpDirections)
       rate1 <- comp$rate1
       pvalues1 <- comp$pvalues1
-  ##    ptime2 <- proc.time()
+      ##    ptime2 <- proc.time()
       ##ptime1 <- proc.time()
-      comp <- computation.tots2(tab = tab, A = A[indices])
+      comp <- computation.tots2.jointly(tab = tabs, A = A, ZeroDirection, bumpDirections)
       rate2 <- comp$rate2
       pvalues2 <- comp$pvalues2
       ##ptime2 <- proc.time()
@@ -358,7 +482,31 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
       tab$p.valueArea <- pvalues2
       tab$fwerArea <- rate2
       tab <- tab[order(tab$fwer, -tab$area), ]
-      tabs[[j]] <- tab
+      tabs <- new_tabs  
+    } else {
+      for (j in 1:length(coef))
+      {
+        tab <- tabs[[j]]
+        indices <- seq(1, ncol(permBeta), length(coef)) + j -1
+        # If there are n covariates of interest, 
+        # then every n-th permutation in V and L corresponds to the n-th covariate
+        
+        comp <- computation.tots(tab = tab, V = V[indices], L = L[indices])
+        rate1 <- comp$rate1
+        pvalues1 <- comp$pvalues1
+    ##    ptime2 <- proc.time()
+        ##ptime1 <- proc.time()
+        comp <- computation.tots2(tab = tab, A = A[indices])
+        rate2 <- comp$rate2
+        pvalues2 <- comp$pvalues2
+        ##ptime2 <- proc.time()
+        tab$p.value <- pvalues1
+        tab$fwer <- rate1
+        tab$p.valueArea <- pvalues2
+        tab$fwerArea <- rate2
+        tab <- tab[order(tab$fwer, -tab$area), ]
+        tabs[[j]] <- tab
+      }
     }
     algorithm <- list(version = packageDescription("bumphunter")$Version,
         coef = coef, cutoff = cutoff, pickCutoff = pickCutoff,

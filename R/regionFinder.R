@@ -98,7 +98,8 @@ clusterMaker <- function(chr, pos, assumeSorted = FALSE, maxGap=300){
 regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
                          ind=seq(along=getLengthMatrixOrVector(x)),order=TRUE, oneTable=TRUE,
                          maxGap=300, cutoff=quantile(abs(x), 0.99),
-                         assumeSorted = FALSE, verbose = TRUE){
+                         assumeSorted = FALSE, verbose = TRUE, 
+                         addMeans = F, mat=NULL, design=NULL, null_model_coef=NULL){
     x <- as.matrix(x)
     if(any(is.na(x[ind,]))){
         warning("NAs found and removed. ind changed.")
@@ -125,6 +126,28 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
       
       res[[i]]$L <- res[[i]]$indexEnd - res[[i]]$indexStart+1
       res[[i]]$clusterL <- sapply(Indexes[[i]], function(Index) clusterN[ind[Index]][1])
+      
+      if (addMeans & !is.null(mat))
+      {
+        if (!is.null(nullmodel_coef))
+        {
+          res_null <- sapply(Indexes[[i]],function(Index) rowMeans(matrix(mat[ind[Index],nullmodel_coef])))
+          res_null <- matrix(res_null, ncol=1)
+          colnames(res_null)[1] <- "null_model.mean" 
+        } else {
+          res_null <- c()
+        }
+        
+        if (!is.null(design))
+        {
+          res_design <- apply(design, 2, function(col) {
+            sapply(Indexes[[i]],function(Index) rowMeans(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
+            })
+          colnames(res_design) <- rep("covariate.mean", ncol(design))
+        }
+
+        res[[i]] <- cbind(res[[i]], res_null, res_design)
+      }
     }
     names(res) <- c("up","dn")
     if(order & !oneTable){
@@ -166,3 +189,21 @@ boundedClusterMaker <- function(chr, pos, assumeSorted = FALSE,
     clusterIDs
 }
 
+getNames <- function(tab)
+{
+  return(paste(tab$chr, tab$start, tab$end))
+}
+
+intervalIsLessThan <- function(greaterIntervals, smallerIntervals)
+{
+  if (greaterIntervals) {}
+}
+
+findIntersection <- function(tabs)
+{ 
+  # !!! to implement
+  tabs[[i]] <- 
+  
+  
+  return(list(joined_tabs=joined_tabs, LvalueList=LvalueList))
+}
