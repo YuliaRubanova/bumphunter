@@ -127,26 +127,34 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
       res[[i]]$L <- res[[i]]$indexEnd - res[[i]]$indexStart+1
       res[[i]]$clusterL <- sapply(Indexes[[i]], function(Index) clusterN[ind[Index]][1])
       
+      takeRowMeans <- function(x)
+      {
+        if (is.null(dim(x)))
+        {
+          mean(x)
+        } else {
+          rowMeans(x)
+        }
+      }
+      
       if (addMeans & !is.null(mat))
       {
         if (!is.null(nullmodel_coef))
         {
-          res_null <- sapply(Indexes[[i]],function(Index) rowMeans(matrix(mat[ind[Index],nullmodel_coef])))
+          res_null <- sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],nullmodel_coef], nrow=1)))
           res_null <- matrix(res_null, ncol=1)
           colnames(res_null)[1] <- "null_model.mean" 
-        } else {
-          res_null <- c()
+          res[[i]] <- cbind(res[[i]], res_null)
         }
         
-        if (!is.null(design))
+        if (!is.null(design) && length(Indexes[[i]]) != 0)
         {
           res_design <- apply(design, 2, function(col) {
-            sapply(Indexes[[i]],function(Index) rowMeans(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
+            sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
             })
           colnames(res_design) <- rep("covariate.mean", ncol(design))
+          res[[i]] <- cbind(res[[i]], res_design)
         }
-
-        res[[i]] <- cbind(res[[i]], res_null, res_design)
       }
     }
     names(res) <- c("up","dn")

@@ -247,7 +247,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     for (j in 1:length(coef))
     {
       tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
-        cutoff = cutoff, ind = Index, verbose = FALSE)
+        cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, null_model_coef=null_model_coef)
         
       if (nrow(tabs[[j]]) == 0) {
           if (verbose)
@@ -358,6 +358,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     computation.tots.jointly <- function(tabs, V, L, ZeroDirection, bumpDirections) {
       res <- findIntersection(tabs)
       
+      # !!! Join tabs and recount all params such as length and so on !!!
       joined_tabs <- res$joined_tabs
       LvalueList <- res$LvalueList
       
@@ -391,7 +392,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             } else {
               # Also: add bump shrinking!!!
               # Add constraints on controls while computing p-value !!!
-              # !!!! Incorrect ???
+              # !!!! Incorrect !!!
 #                 correct_direction <- FALSE
 #                 for (j in 1:length(bumpDirections))
 #                 {
