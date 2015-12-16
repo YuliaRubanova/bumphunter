@@ -141,18 +141,18 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
       {
         if (!is.null(nullmodel_coef))
         {
-          res_null <- sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],nullmodel_coef], nrow=1)))
+          res_null <- sapply(Indexes[[i]],function(Index) median(matrix(mat[ind[Index],nullmodel_coef], nrow=1)))
           res_null <- matrix(res_null, ncol=1)
-          colnames(res_null)[1] <- "null_model.mean" 
+          colnames(res_null)[1] <- "null_model.median" 
           res[[i]] <- cbind(res[[i]], res_null)
         }
         
         if (!is.null(design) && length(Indexes[[i]]) != 0)
         {
           res_design <- apply(design, 2, function(col) {
-            sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
+            sapply(Indexes[[i]],function(Index) median(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
             })
-          colnames(res_design) <- rep("covariate.mean", ncol(design))
+          colnames(res_design) <- paste0("covariate.median", 1:ncol(design))
           res[[i]] <- cbind(res[[i]], res_design)
         }
       }
@@ -197,21 +197,95 @@ boundedClusterMaker <- function(chr, pos, assumeSorted = FALSE,
     clusterIDs
 }
 
-getNames <- function(tab)
+intersectChromosomalRegions(regions1, regions2)
 {
-  return(paste(tab$chr, tab$start, tab$end))
-}
+  if (unique(regions1$chr) != 1 || unique(regions2$chr) != 1)
+  {
+    stop("intersectChromosomalRegions works with regions only from one chromosome. Please separate data per-chromosome.")
+  }
+  stopifnot(unique(regions1$chr) == unique(regions2$chr))
+  
+  regions1 <- regions1[,c("chr", "start", "end")]
+  regions1 <- regions1[order(regions1$start, regions1$end),]
+  regions2 <- regions2[,c("chr", "start", "end")]
+  regions2 <- regions2[order(regions2$start, regions2$end),]
+  
+  regions1.vector <- as.vector(t(regions1[,c("start", "end")]))
+  regions2.vector <- as.vector(t(regions2[,c("start", "end")]))
+  
+  clusterStarts <- findInterval(regions1$start, regions2.vector, rightmost.closed = T)
+  # If the position is equal to the end of the region, the findInterval function will put it into even interval,
+  # but we want this position to be in odd interval, as we want all odd intervals to be closed because those are the regions with which we intersect.
+  not_in_interval <- which(clusterStarts %% 2 == 0)
+  should_be_in_interval <- not_in_interval[regions1$start[not_in_interval] %in% regions2$end]
+  clusterStarts[should_be_in_interval] <- clusterStarts[should_be_in_interval]-1
+  
+  clusterEnds <- findInterval(regions1$end, regions2.vector, rightmost.closed = T)
+  not_in_interval <- which(clusterEnds %% 2 == 0)
+  should_be_in_interval <- not_in_interval[regions1$end[not_in_interval] %in% regions2$end]
+  clusterEnds[should_be_in_interval] <- clusterEnds[should_be_in_interval]-1
+  
+  # The only case when region1 interval does not overlap any regions2 interval is when regions1 intervals turns out to be inside the even interval
+  overlap <- !((clusterStarts %% 2 == 0) & (clusterEnds %% 2 == 0) & clusterStarts == clusterEnds)
+  # which(overlap) -- rows in regions1 which have at least one overlap with regions2
+  # intersecting_regions -- List of intervals in regions2 which have overlap and row in regions1 which correspond to this overlap
+  intersecting_regions <- do.call(rbind, lapply(which(overlap), function(x) { cbind(clusterStarts[x]:clusterEnds[x], x) }))
+  intersecting_regions <- intersecting_regions[intersecting_regions[,1] %% 2 == 1,]
+  # first column of intersecting_rows -- rows in regions2 with have at least one overlap with regions1
+  intersecting_rows <- cbind(ceiling(intersecting_regions[,1]/2), intersecting_regions[,2])
+  intersecting_rows_regions2 <- regions2[intersecting_rows[,1],]
+  intersecting_rows_regions1 <- regions1[intersecting_rows[,2],]
+  colnames(intersecting_rows) <- c("regions2.row_index", "regions1.row_index")
 
-intervalIsLessThan <- function(greaterIntervals, smallerIntervals)
-{
-  if (greaterIntervals) {}
+  # Index of first row in regions2 which corresponds to a an overlap particular interval from regions1
+  #first_element_of_intersection <- aggregate(1:nrow(intersecting_rows), by=list(intersecting_rows[,2]), function(x) {x[1]})[,2]
+  #last_element_of_intersection <- aggregate(1:nrow(intersecting_rows), by=list(intersecting_rows[,2]), function(x) {x[length(x)]})[,2]
+  
+  # For each interval in regions1 this is start and end in regions1
+  regions1.first_start <- intersecting_rows_regions1$start
+  regions1.last_end <- intersecting_rows_regions1$end
+  
+  # For each interval in regions1 this is start and end of edge intervals in regions2
+  regions2.first_start <- intersecting_rows_regions2$start
+  regions2.last_end <- intersecting_rows_regions2$end
+  
+  intersecting_rows_regions2$start <- rowMax(cbind(regions1.first_start, regions2.first_start))
+  intersecting_rows_regions2$end <- rowMin(cbind(regions1.last_end, regions2.last_end))
+  
+  intersection <- intersecting_rows_regions2
+
+  return(intersection)
 }
 
 findIntersection <- function(tabs)
 { 
-  # !!! to implement
-  tabs[[i]] <- 
+  chrs <- do.call(union, sapply(tabs, function(x) {x$chr}))
   
+  tabs.splitted.per_chr <- as.list(vector(length = length(chrs)))
+  names(tabs.splitted.per_chr) <- chrs  
+  for (i in 1:length(tabs))
+  {
+    tmp.splitted <- split(tabs[[i]], tabs[[i]]$chr)
+    
+    for (chr in names(tmp.splitted[[i]]))
+    { 
+      tabs.splitted.per_chr[[chr]] <- c(tabs.splitted.per_chr[[chr]],  tmp.splitted[[i]][[chr]])
+    }
+  }
   
-  return(list(joined_tabs=joined_tabs, LvalueList=LvalueList))
+  joined_tabs.splitted <- as.list(vector(length = length(chrs)))
+  names(joined_tabs.splitted) <- chrs  
+  for (chr in names(joined_tabs.splitted))
+  {
+    intersection <- tabs.splitted.per_chr[[chr]][[1]]
+    for (j in 2:length(tabs.splitted.per_chr[[chr]]))
+    {
+      intersection <- intersectChromosomalRegions(intersection, tabs.splitted.per_chr[[chr]][[j]])
+    }
+    joined_tabs.splitted[[chr]] <- intersection
+  }
+  
+  joined_tabs <- unsplit(joined_tabs, chrs)
+
+  return(joined_tabs)
 }
