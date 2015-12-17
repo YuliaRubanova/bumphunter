@@ -99,7 +99,7 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
                          ind=seq(along=getLengthMatrixOrVector(x)),order=TRUE, oneTable=TRUE,
                          maxGap=300, cutoff=quantile(abs(x), 0.99),
                          assumeSorted = FALSE, verbose = TRUE, 
-                         addMeans = F, mat=NULL, design=NULL, null_model_coef=NULL){
+                         addMeans = F, mat=NULL, design=NULL, null_model_coef=NULL, Indexes=NULL){
     x <- as.matrix(x)
     if(any(is.na(x[ind,]))){
         warning("NAs found and removed. ind changed.")
@@ -107,7 +107,8 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
     } 
     if(is.null(cluster))
         cluster <- clusterMaker(chr, pos, maxGap=maxGap, assumeSorted = assumeSorted)
-    Indexes <- getSegments(x = x[ind,], f = cluster[ind], cutoff = cutoff,
+    if (is.null(Indexes))
+       Indexes <- getSegments(x = x[ind,], f = cluster[ind], cutoff = cutoff,
                            assumeSorted = assumeSorted, verbose = verbose)
     clusterN <- table(cluster)[as.character(cluster)]
     
@@ -197,9 +198,9 @@ boundedClusterMaker <- function(chr, pos, assumeSorted = FALSE,
     clusterIDs
 }
 
-intersectChromosomalRegions(regions1, regions2)
+intersectChromosomalRegions <- function(regions1, regions2)
 {
-  if (unique(regions1$chr) != 1 || unique(regions2$chr) != 1)
+  if (length(unique(regions1$chr)) != 1 || length(unique(regions2$chr)) != 1)
   {
     stop("intersectChromosomalRegions works with regions only from one chromosome. Please separate data per-chromosome.")
   }
@@ -261,19 +262,19 @@ findIntersection <- function(tabs)
 { 
   chrs <- do.call(union, sapply(tabs, function(x) {x$chr}))
   
-  tabs.splitted.per_chr <- as.list(vector(length = length(chrs)))
+  tabs.splitted.per_chr <- as.list(vector("list", length = length(chrs)))
   names(tabs.splitted.per_chr) <- chrs  
   for (i in 1:length(tabs))
   {
     tmp.splitted <- split(tabs[[i]], tabs[[i]]$chr)
     
-    for (chr in names(tmp.splitted[[i]]))
+    for (chr in names(tmp.splitted))
     { 
-      tabs.splitted.per_chr[[chr]] <- c(tabs.splitted.per_chr[[chr]],  tmp.splitted[[i]][[chr]])
+      tabs.splitted.per_chr[[chr]] <- c(tabs.splitted.per_chr[[chr]],  list(tmp.splitted[[chr]]))
     }
   }
   
-  joined_tabs.splitted <- as.list(vector(length = length(chrs)))
+  joined_tabs.splitted <- as.list(vector("list", length = length(chrs)))
   names(joined_tabs.splitted) <- chrs  
   for (chr in names(joined_tabs.splitted))
   {
@@ -285,7 +286,51 @@ findIntersection <- function(tabs)
     joined_tabs.splitted[[chr]] <- intersection
   }
   
-  joined_tabs <- unsplit(joined_tabs, chrs)
+  joined_tabs <- unsplit(joined_tabs.splitted, chrs)
 
   return(joined_tabs)
+}
+
+find_cpg_in_table <- function(regions, all_cpg, region_names = list(), returnIndices=F)
+{
+  if ((length(region_names) != 0) & (nrow(regions) != length(region_names)))
+  {
+    print("Error: nrow(regions) != length(region_names)")
+    return
+  }
+  
+  all_cpg.splitted <- split(all_cpg, all_cpg$CHR)
+  if (!grepl("chr[0-9]*", names(all_cpg.splitted)[1]) && grepl("chr[0-9]*", regions$chr[1]))
+  {
+    names(all_cpg.splitted) <- paste0("chr", names(all_cpg.splitted))
+  }
+  
+  CpGs <- all_cpg.splitted[[1]][1,][-1,]
+  CpGs_indices <- c()
+  for (chr in unique(regions$chr))
+  {
+    current_data <- all_cpg.splitted[[toString(chr)]]
+    current_regions <- regions[regions$chr == chr, ]
+    current_region_names <- region_names[regions$chr == chr]
+    
+    l_current_data <- as.vector(t(cbind(current_regions$start-1, current_regions$end+1)))
+    intervals <- findInterval(current_data$MAPINFO, l_current_data, rightmost.closed=T)
+    
+    data <- current_data[which(intervals %% 2 == 1),]
+    indices <- which(intervals %% 2 == 1)
+    intervals <- intervals[which(intervals %% 2 == 1)]
+    
+    if (length(region_names) != 0)
+    {
+      if (nrow(data) != 0)
+        data <- cbind(name=current_region_names[ceiling(intervals / 2)], data)
+    }
+    
+    if (returnIndices)
+      data <- cbind(indices=indices, data)
+    
+    CpGs <- rbind(CpGs, data)
+  }
+  
+  return(CpGs)
 }

@@ -1,4 +1,7 @@
-c
+greaterOrEqual <- function(x,y) {
+  precision <- sqrt(.Machine$double.eps)
+  (x >= y) | (abs(x-y) <= precision)
+}
 
 closeSockets <- function() {
     allCon <- showConnections()
@@ -30,17 +33,25 @@ getLengthMatrixOrVector <- function(x)
 toVerticalMatrix <- function(L)
 {
   if (is.vector(L))
-    return(as.matrix(L, ncol=1))
+    return(matrix(L, ncol=1))
+  else 
+    return(as.matrix(L))
+}
+
+toHorizontalMatrix <- function(L)
+{
+  if (is.vector(L))
+    return(matrix(L, nrow=1))
   else 
     return(as.matrix(L))
 }
 
 LogicalAnd <- function(a)
 {
-  res <- a[1]
-  for (i in 2:length(a))
+  res <- TRUE
+  for (i in 1:ncol(a))
   {
-    res <- res & a[i]
+    res <- res & a[,i]
   }
   return(res)
 }

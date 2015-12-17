@@ -320,55 +320,67 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         return(list(rate1 = rate1, pvalues1 = pvalues1))
     }
     computation.tots2 <- function(tab, A) {
-      Avalue <- matrix(tab$area, ncol = 1)
-      chunksize <- ceiling(nrow(Avalue)/workers)
-      subA <- NULL
-      tots2 <- foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
-                         .combine = "rbind", .packages = "bumphunter") %dorng%
-            {
-              greaterOrEqual <- function(x,y) {
-                precision <- sqrt(.Machine$double.eps)
-                (x >= y) | (abs(x-y) <= precision)
-                }
-                
-                toVerticalMatrix <- function(L)
-                {
-                  if (is.vector(L))
-                    return(as.matrix(L, ncol=1))
-                  else 
-                    return(as.matrix(L))
-                }
+        Avalue <- matrix(tab$area, ncol = 1)
+        chunksize <- ceiling(nrow(Avalue)/workers)
+        subA <- NULL
+        tots2 <- t(foreach(subA = iter(Avalue, by = "row", chunksize = chunksize),
+                           .combine = "c", .packages = "bumphunter") %dorng%
+        {
+            greaterOrEqual <- function(x,y) {
+              precision <- sqrt(.Machine$double.eps)
+              (x >= y) | (abs(x-y) <= precision)
+            }
+          
             
-            res <- toVerticalMatrix(sapply(subA, function(x) {
-                return(sapply(seq(along = A), function(i) {
-                  sum(greaterOrEqual(A[[i]], x[1]))
-                }))
+            toHorizontalMatrix <- function(L)
+            {
+              if (is.vector(L))
+                return(matrix(L, nrow=1))
+              else 
+                return(matrix(L))
+            }
+            
+            toHorizontalMatrix(sapply(subA, function(x) {
+              return(sapply(seq(along = A), function(i) {
+                sum(greaterOrEqual(A[[i]], x[1]))
               }))
-
-          }
-      
-          if (is.vector(tots2)) {
-            tots2 <- matrix(tots2, nrow = 1)
-          }
-          rate2 <- rowMeans(tots2 > 0)
-          pvalues2 <- rowSums(tots2)/sum(sapply(nulltabs, nrow))
-          return(list(rate2 = rate2, pvalues2 = pvalues2))
+            }))
+        })
+        
+        if (is.vector(tots2)) {
+          tots2 <- matrix(tots2, nrow = 1)
+        }
+        
+        rate2 <- rowMeans(tots2 > 0)
+        pvalues2 <- rowSums(tots2)/sum(sapply(nulltabs, nrow))
+        return(list(rate2 = rate2, pvalues2 = pvalues2))
     }
 
+
     computation.tots.jointly <- function(tabs, V, L, ZeroDirection, bumpDirections) {
-      res <- findIntersection(tabs)
+      joined_tabs <- findIntersection(tabs)
       
-      # !!! Join tabs and recount all params such as length and so on !!!
-      joined_tabs <- res$joined_tabs
-      LvalueList <- res$LvalueList
+      all_cpg = cbind.data.frame(CHR=unlist(lapply(chr, as.character)), MAPINFO=pos, stringsAsFactors=F)
+      cpgs = find_cpg_in_table(joined_tabs, all_cpg, region_names=1:nrow(joined_tabs), returnIndices=T)
+      ind <- cpgs$indices
+      cluster <- cpgs$name
+      Indexes <- vector("list", length=2)
+      Indexes[[1]] <- list()
+      Indexes[[2]] <- aggregate(1:length(cluster), by=list(cluster), FUN=list)[,2]
       
-      for (i in 1:length(LvalueList))
+      joined_tabs_with_values <- list()
+      LvalueList <- list()
+      for (j in 1:length(coef))
       {
-        LvalueList[[i]] <- cbind(LvalueList$L, abs(LvalueList$value))
+        joined_tabs_with_values[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster=cluster,
+                                  cutoff = cutoff, ind = ind, verbose = FALSE, 
+                                  addMeans = T, mat=mat, design=design, null_model_coef=null_model_coef, Indexes=Indexes)
+        # The elements of the lists are Lvalues for each covariate of interest
+        LvalueList[[j]] <- cbind.data.frame(L=joined_tabs_with_values[[j]]$L, value=abs(joined_tabs_with_values[[j]]$value))
       }
-      
-      Ls <- do.call(cbind, sapply(LvalueList, function(x) {x$L}))
-      values <- do.call(cbind, sapply(LvalueList, function(x) {x$value}))
+
+      Ls <- sapply(LvalueList, function(x) {x$L})
+      values <- sapply(LvalueList, function(x) {x$value})
       Lvalue <- cbind(Ls, values)
       
       chunksize <- ceiling(nrow(Lvalue)/workers)
@@ -382,16 +394,17 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             }
             
           apply(subL, 1, function(x) {
-            # !!! fix seq(along = V) here
-            FoundBumpsLs <- subL[1:(length(subL)/2)]
-            FoundBumpsValues <- subL[(length(subL)/2):length(subL)]
+            FoundBumpsLs <- x[1:(length(x)/2)]
+            FoundBumpsValues <- x[((length(x)/2)+1):length(x)]
             
-            if (is.null(ZeroDirection) || is.null(bumpDirections))
+            if (is.null(SamplesToDetermineDirection) || is.null(bumpDirections))
             {
               correct_direction <- TRUE
             } else {
               # Also: add bump shrinking!!!
               # Add constraints on controls while computing p-value !!!
+              # Add that values of controls should come from control-distribution
+              # Add direction check !!!
               # !!!! Incorrect !!!
 #                 correct_direction <- FALSE
 #                 for (j in 1:length(bumpDirections))
@@ -403,21 +416,23 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
 #                   }
 #                 }
               }
-            
-            
-            
-            
-          BiggerNullBumpIndicesForPermutation <- function(l, v, FoundBumpsLs, FoundBumpsValues, correct_direction)
+controls_come_from_distribution <- TRUE
+#control <- melt(mat[,])
+correct_direction <- TRUE
+
+
+          BiggerNullBumpIndicesForPermutation <- function(l, v, FoundBumpsLs, FoundBumpsValues)
             {
                 tmp <- sapply(1:length(FoundBumpsLs), function(j) {
                   greaterOrEqual(l, FoundBumpsLs[j]) &
-                    greaterOrEqual(abs(v), FoundBumpsValues[j]) & correct_direction
+                    greaterOrEqual(abs(v), FoundBumpsValues[j])
                   } )
                 return(LogicalAnd(tmp))
             }
           
             res <- sapply(seq(along = V), function(i) {
-              sum(BiggerNullBumpIndicesForPermutation(L[[i]], V[[i]], FoundBumpsLs, FoundBumpsValues, correct_direction))
+              sum(BiggerNullBumpIndicesForPermutation(L[[i]], V[[i]], FoundBumpsLs, FoundBumpsValues),
+                  correct_direction & controls_come_from_distribution)
             })
             c(mean(res > 0), sum(res))
           })
@@ -429,6 +444,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     }
 
     computation.tots2.jointly <- function(tab, A, ZeroDirection, bumpDirections) {
+      # Make this function !!!!
         Avalue <- matrix(tab$area, ncol = 1)
         chunksize <- ceiling(nrow(Avalue)/workers)
         subA <- NULL
@@ -449,10 +465,10 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             return(as.matrix(L))
         }
         
-        res <- toVerticalMatrix(sapply(subA, function(x) {
-          return(sapply(seq(along = A), function(i) {
-            sum(greaterOrEqual(A[[i]], x[1]))
-          }))
+          toVerticalMatrix(sapply(subA, function(x) {
+            return(sapply(seq(along = A), function(i) {
+              sum(greaterOrEqual(A[[i]], x[1]))
+            }))
         }))
         
       }
@@ -488,7 +504,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
       for (j in 1:length(coef))
       {
         tab <- tabs[[j]]
-        indices <- seq(1, ncol(permBeta), length(coef)) + j -1
+        indices <- seq(1, ncol(permBeta), length(coef)) + j - 1
         # If there are n covariates of interest, 
         # then every n-th permutation in V and L corresponds to the n-th covariate
         
@@ -498,7 +514,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     ##    ptime2 <- proc.time()
         ##ptime1 <- proc.time()
         comp <- computation.tots2(tab = tab, A = A[indices])
-        rate2 <- comp$rate2
+        lengthrate2 <- comp$rate2
         pvalues2 <- comp$pvalues2
         ##ptime2 <- proc.time()
         tab$p.value <- pvalues1
