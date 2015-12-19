@@ -99,7 +99,7 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
                          ind=seq(along=getLengthMatrixOrVector(x)),order=TRUE, oneTable=TRUE,
                          maxGap=300, cutoff=quantile(abs(x), 0.99),
                          assumeSorted = FALSE, verbose = TRUE, 
-                         addMeans = F, mat=NULL, design=NULL, null_model_coef=NULL, Indexes=NULL){
+                         addMeans = F, mat=NULL, design=NULL, controls=NULL, Indexes=NULL){
     x <- as.matrix(x)
     if(any(is.na(x[ind,]))){
         warning("NAs found and removed. ind changed.")
@@ -114,7 +114,7 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
     
     res <- vector("list",2)
     for(i in 1:2){
-      res[[i]]<-
+      res[[i]] <-
         data.frame(chr=sapply(Indexes[[i]],function(Index) chr[ind[Index[1]]]),
                    start=sapply(Indexes[[i]],function(Index) min(pos[ind[Index]])),
                    end=sapply(Indexes[[i]], function(Index) max(pos[ind[Index]])),
@@ -140,11 +140,11 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
       
       if (addMeans & !is.null(mat))
       {
-        if (!is.null(nullmodel_coef))
+        if (!is.null(controls))
         {
-          res_null <- sapply(Indexes[[i]],function(Index) median(matrix(mat[ind[Index],nullmodel_coef], nrow=1)))
+          res_null <- sapply(Indexes[[i]],function(Index) median(matrix(mat[ind[Index],controls], nrow=1)))
           res_null <- matrix(res_null, ncol=1)
-          colnames(res_null)[1] <- "null_model.median" 
+          colnames(res_null)[1] <- "controls.median" 
           res[[i]] <- cbind(res[[i]], res_null)
         }
         
@@ -258,7 +258,7 @@ intersectChromosomalRegions <- function(regions1, regions2)
   return(intersection)
 }
 
-findIntersection <- function(tabs)
+findIntersection <- function(tabs, maxGap=maxGap)
 { 
   chrs <- do.call(union, sapply(tabs, function(x) {x$chr}))
   
@@ -283,6 +283,10 @@ findIntersection <- function(tabs)
     {
       intersection <- intersectChromosomalRegions(intersection, tabs.splitted.per_chr[[chr]][[j]])
     }
+    
+  
+    
+    
     joined_tabs.splitted[[chr]] <- intersection
   }
   
