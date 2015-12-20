@@ -22,12 +22,12 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                                smooth=smooth,
                                smoothFunction=smoothFunction,
                                useWeights=useWeights, B=B,
-                               permutations=NULL,
+                               permutations=permutations,
                                verbose=verbose, 
                                nullmodel_coef=nullmodel_coef, 
-                               computePValuesJointly = F, 
-                               bumpDirections = NULL, 
-                               SamplesToDetermineDirection = NULL, ...)
+                               computePValuesJointly = computePValuesJointly, 
+                               bumpDirections = bumpDirections, 
+                               SamplesToDetermineDirection = SamplesToDetermineDirection, ...)
           })
 
 
@@ -376,23 +376,60 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
       {
         joined_tabs_with_values[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster=cluster,
                                   cutoff = cutoff, ind = ind, verbose = FALSE, 
-                                  addMeans = T, mat=mat, design=design, controls=SamplesToDetermineDirection, Indexes=Indexes)
+                                  addMeans = T, mat=mat, design=design, controls=SamplesToDetermineDirection, 
+                                  Indexes=Indexes, clusterInSelectedPositions=T)
         joined_tabs_with_values[[j]] <- joined_tabs_with_values[[j]][order(joined_tabs_with_values[[j]]$chr, joined_tabs_with_values[[j]]$start,joined_tabs_with_values[[j]]$end),]
         # The elements of the lists are Lvalues for each covariate of interest
         LvalueList[[j]] <- cbind.data.frame(L=joined_tabs_with_values[[j]]$L, value=abs(joined_tabs_with_values[[j]]$value))
         AvalueList[[j]] <- cbind.data.frame(area=joined_tabs_with_values[[j]]$area)
       }
-        
+
+      controls <- joined_tabs_with_values[[1]][,grep("controls*", names(joined_tabs_with_values[[1]]))]
+      covariates <- joined_tabs_with_values[[1]][,grep("covariate*", names(joined_tabs_with_values[[1]]))]
+      Diff <- covariates - controls
+      colnames(Diff) <- paste0("covariate.diff", 1:length(coef))
+      
+      
+      # Add constraints on controls while computing p-value !!!
+      # Add that values of controls should come from control-distribution
+      
+      if (is.null(SamplesToDetermineDirection) || is.null(bumpDirections))
+      {
+        correct_direction <- matrix(TRUE, nrow=nrow(joined_tabs_with_values[[1]]))
+      } else {
+        correct_direction <- matrix(FALSE, nrow=nrow(joined_tabs_with_values[[1]]))
+        for (j in 1:length(bumpDirections))
+        {
+          correct_direction[which(rowSums(t(bumpDirections[[j]] * t(Diff)) < 0) == 0)] <- TRUE
+        }
+      }
+      controls_come_from_distribution <- TRUE
+      #control <- melt(mat[,])
+      
+      for (j in 1:length(coef))
+      {
+        joined_tabs_with_values[[j]] <- joined_tabs_with_values[[j]][correct_direction, ]
+        LvalueList[[j]] <- LvalueList[[j]][correct_direction, ]
+        AvalueList[[j]] <- cbind.data.frame(area=AvalueList[[j]][correct_direction, ])
+      }
+      
       Ls <- sapply(LvalueList, function(x) {x$L})
       values <- sapply(LvalueList, function(x) {x$value})
       Lvalue <- cbind(Ls, values)
       Avalue <- sapply(AvalueList, function(x) {x$area})
-
+      
+      
+      
+      
+      
+      
+      
+      
       ptime1 <- proc.time()
       
-      chunksize <- ceiling(nrow(Lvaluetmp)/workers)
+      chunksize <- ceiling(nrow(Lvalue)/workers)
       subL <- NULL
-      tots <- foreach(subL = iter(Lvaluetmp, by = "row", chunksize = chunksize),
+      tots <- foreach(subL = iter(Lvalue, by = "row", chunksize = chunksize),
                       .combine = "cbind", .packages = "bumphunter") %dorng%
         {
   
@@ -410,35 +447,8 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             }
           
           toHorizontalMatrix(apply(subL, 1, function(x) {
-            
-  
             FoundBumpsLs <- x[1:(length(x)/2)]
             FoundBumpsValues <- x[((length(x)/2)+1):length(x)]
-            
-            if (is.null(SamplesToDetermineDirection) || is.null(bumpDirections))
-            {
-              correct_direction <- TRUE
-            } else {
-              # Also: add bump shrinking!!!
-              # Add constraints on controls while computing p-value !!!
-              # Add that values of controls should come from control-distribution
-              # Add direction check !!!
-              # !!!! Incorrect !!!
-              
-              
-                correct_direction <- FALSE
-                for (j in 1:length(bumpDirections))
-                {
-                  if (sum(bumpDirections[[j]] * FoundBumpsValues < 0) == 0)
-                  {
-                    correct_direction = TRUE
-                    break
-                  }
-                }
-              }
-controls_come_from_distribution <- TRUE
-#control <- melt(mat[,])
-
 
           BiggerNullBumpIndicesForPermutation <- function(list_for_comparison, value)
           {
@@ -461,7 +471,7 @@ controls_come_from_distribution <- TRUE
             res <- sapply(seq(along = V), function(i) {
               sum(BiggerNullBumpIndicesForPermutation(L[[i]], FoundBumpsLs) & 
                    BiggerNullBumpIndicesForPermutation(sapply(V[[i]],abs), FoundBumpsValues)  &
-                    correct_direction & controls_come_from_distribution)
+                    controls_come_from_distribution)
             })
             c(mean(res > 0), sum(res))
           }))
@@ -518,7 +528,7 @@ ptime1 <- proc.time()
           
           sapply(seq(along = A), function(i) {
             sum(BiggerNullBumpIndicesForPermutation(A[[i]], x) &
-                correct_direction & controls_come_from_distribution)
+                 controls_come_from_distribution)
           })
         })))
       }
@@ -540,7 +550,8 @@ print (proc.time() - ptime1)
     if (computePValuesJointly)
     {
       ptime2 <- proc.time()
-      comp <- computation.tots.jointly(tab = tabs, V = V, L = L, A = A, bumpDirections)
+      comp <- computation.tots.jointly(tab = tabs, V = V, L = L, A = A,
+         bumpDirections, SamplesToDetermineDirection)
       print(proc.time()-ptime2)
       rate1 <- comp$rate1
       pvalues1 <- comp$pvalues1
@@ -556,6 +567,11 @@ print (proc.time() - ptime1)
       joined_tabs$p.valueArea <- pvalues2
       joined_tabs$fwerArea <- rate2
       joined_tabs <- joined_tabs[order(joined_tabs$p.value, -joined_tabs$L), ]
+     
+      if (verbose)
+        message(sprintf("[bumphunterEngine] Found %s joined bumps.",
+                        nrow(joined_tabs)))
+
       tabs <- joined_tabs
     } else {
       for (j in 1:length(coef))

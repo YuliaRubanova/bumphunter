@@ -99,7 +99,8 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
                          ind=seq(along=getLengthMatrixOrVector(x)),order=TRUE, oneTable=TRUE,
                          maxGap=300, cutoff=quantile(abs(x), 0.99),
                          assumeSorted = FALSE, verbose = TRUE, 
-                         addMeans = F, mat=NULL, design=NULL, controls=NULL, Indexes=NULL){
+                         addMeans = F, mat=NULL, design=NULL, controls=NULL, 
+                         Indexes=NULL, clusterInSelectedPositions=F){
     x <- as.matrix(x)
     if(any(is.na(x[ind,]))){
         warning("NAs found and removed. ind changed.")
@@ -118,7 +119,7 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
         data.frame(chr=sapply(Indexes[[i]],function(Index) chr[ind[Index[1]]]),
                    start=sapply(Indexes[[i]],function(Index) min(pos[ind[Index]])),
                    end=sapply(Indexes[[i]], function(Index) max(pos[ind[Index]])),
-                   value=sapply(Indexes[[i]],function(Index)summary(y[ind[Index],])),
+                   value=sapply(Indexes[[i]],function(Index)mean(y[ind[Index],])),
                    area=sapply(Indexes[[i]],function(Index)abs(sum(y[ind[Index],]))),
                    cluster=sapply(Indexes[[i]],function(Index)cluster[ind[Index]][1]),
                    indexStart=sapply(Indexes[[i]], function(Index) min(ind[Index])),
@@ -126,8 +127,12 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
                    stringsAsFactors=FALSE)
       
       res[[i]]$L <- res[[i]]$indexEnd - res[[i]]$indexStart+1
-      res[[i]]$clusterL <- sapply(Indexes[[i]], function(Index) clusterN[ind[Index]][1])
-      
+      if (!clusterInSelectedPositions)
+      {
+        res[[i]]$clusterL <- sapply(Indexes[[i]], function(Index) clusterN[ind[Index]][1])
+      } else { 
+        res[[i]]$clusterL <- sapply(Indexes[[i]], function(Index) clusterN[Index][1])
+      }
       takeRowMeans <- function(x)
       {
         if (is.null(dim(x)))
@@ -142,16 +147,16 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
       {
         if (!is.null(controls))
         {
-          res_null <- sapply(Indexes[[i]],function(Index) median(matrix(mat[ind[Index],controls], nrow=1)))
-          res_null <- matrix(res_null, ncol=1)
-          colnames(res_null)[1] <- "controls.median" 
-          res[[i]] <- cbind(res[[i]], res_null)
+          res_controls <- sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],controls], nrow=1)))
+          res_controls <- matrix(res_controls, ncol=1)
+          colnames(res_controls)[1] <- "controls.median" 
+          res[[i]] <- cbind(res[[i]], res_controls)
         }
         
         if (!is.null(design) && length(Indexes[[i]]) != 0)
         {
           res_design <- apply(design, 2, function(col) {
-            sapply(Indexes[[i]],function(Index) median(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
+            sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
             })
           colnames(res_design) <- paste0("covariate.median", 1:ncol(design))
           res[[i]] <- cbind(res[[i]], res_design)
@@ -284,8 +289,17 @@ findIntersection <- function(tabs, maxGap=maxGap)
       intersection <- intersectChromosomalRegions(intersection, tabs.splitted.per_chr[[chr]][[j]])
     }
     
-  
-    
+    to_merge <- c(FALSE, (intersection[2:nrow(intersection), ]$start - intersection[1:(nrow(intersection)-1), ]$end < maxGap))
+    while(sum(to_merge) != 0)
+    {
+      last_region_of_group <- to_merge & c(!to_merge[2:length(to_merge)], FALSE)
+      merged_from <- which(last_region_of_group)
+      merged_to <- which(last_region_of_group) - 1
+      
+      intersection[merged_to,]$end <- intersection[merged_from,]$end
+      intersection <- intersection[-merged_from,]
+      to_merge <- c(FALSE, intersection[2:nrow(intersection), ]$start - intersection[1:(nrow(intersection)-1), ]$end < maxGap)
+    }
     
     joined_tabs.splitted[[chr]] <- intersection
   }
