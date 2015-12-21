@@ -55,3 +55,13 @@ LogicalAnd <- function(a)
   }
   return(res)
 }
+
+rowMax <- function(table)
+{
+  return(apply(table, 1, max))
+}
+
+rowMin <- function(table)
+{
+  return(apply(table, 1, min))
+}
