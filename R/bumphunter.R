@@ -9,7 +9,10 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                    useWeights=FALSE, B=ncol(permutations), permutations=NULL,
                    verbose=TRUE, nullmodel_coef=NULL, computePValuesJointly = F, 
                    bumpDirections = NULL, 
-                   SamplesToDetermineDirection = NULL, ...){
+                   SamplesToDetermineDirection = NULL, 
+                   SamplesContraintedByDistribution = NULL,
+                   distribution = NULL,
+                   ...){
               nullMethod  <- match.arg(nullMethod)
               if(missing(design)) stop("design must be specified")
               if(missing(pos)) stop("If object is a matrix, pos must be specified")
@@ -27,7 +30,10 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                                nullmodel_coef=nullmodel_coef, 
                                computePValuesJointly = computePValuesJointly, 
                                bumpDirections = bumpDirections, 
-                               SamplesToDetermineDirection = SamplesToDetermineDirection, ...)
+                               SamplesToDetermineDirection = SamplesToDetermineDirection, 
+                               SamplesContraintedByDistribution = SamplesContraintedByDistribution,
+                               distribution = distribution,
+                               ...)
           })
 
 
@@ -46,7 +52,10 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            nullmodel_coef = NULL, 
                            computePValuesJointly = F, 
                            bumpDirections = NULL, 
-                           SamplesToDetermineDirection = NULL, ...){
+                           SamplesToDetermineDirection = NULL, 
+                           SamplesContraintedByDistribution = NULL,
+                           distribution = NULL,
+                           ...){
     nullMethod  <- match.arg(nullMethod)
     if (is.null(B))  B = 0
     if (!is.matrix(permutations) & !is.null(permutations)) stop("permutations must be NULL or a matrix.")
@@ -362,6 +371,35 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
       
       all_cpg = cbind.data.frame(CHR=unlist(lapply(chr, as.character)), MAPINFO=pos, stringsAsFactors=F)
       cpgs = find_cpg_in_table(joined_tabs, all_cpg, region_names=1:nrow(joined_tabs), returnIndices=T)
+
+      
+      # Samples specified by SamplesContraintedByDistribution should come from a specified distribution
+      ptime1 <- proc.time()
+      if (is.null(SamplesContraintedByDistribution) || is.null(distribution))
+      {
+        controls_come_from_distribution <- matrix(TRUE, nrow=nrow(joined_tabs))
+      } else {
+        controls_come_from_distribution.distances <-  apply(mat[cpgs$indices, SamplesContraintedByDistribution], 1,
+                                                            function(x) {ks.test(x, distribution )$statistic})
+        controls_come_from_distribution <- (controls_come_from_distribution.distances < mean(controls_come_from_distribution.distances))
+      }
+      print(proc.time() - ptime1)
+      
+      cpgs <- cpgs[controls_come_from_distribution, ]
+      
+      ind <- cpgs$indices
+      cluster <- cpgs$name
+      Indexes <- vector("list", length=2)
+      Indexes[[1]] <- list()
+      Indexes[[2]] <- aggregate(1:length(cluster), by=list(cluster), FUN=list)[,2]
+      names(Indexes[[2]]) <- unique(cluster)
+      
+      joined_tabs <- data.frame(chr=sapply(Indexes[[i]],function(Index) chr[ind[Index[1]]]),
+                 start=sapply(Indexes[[i]],function(Index) min(pos[ind[Index]])),
+                 end=sapply(Indexes[[i]], function(Index) max(pos[ind[Index]])))
+      
+      cpgs = find_cpg_in_table(joined_tabs, all_cpg, region_names=1:nrow(joined_tabs), returnIndices=T)
+                 
       ind <- cpgs$indices
       cluster <- cpgs$name
       Indexes <- vector("list", length=2)
@@ -389,10 +427,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
       Diff <- covariates - controls
       colnames(Diff) <- paste0("covariate.diff", 1:length(coef))
       
-      
-      # Add constraints on controls while computing p-value !!!
-      # Add that values of controls should come from control-distribution
-      
+      # Control that bumps have one of the directions specified by bumpDirections
       if (is.null(SamplesToDetermineDirection) || is.null(bumpDirections))
       {
         correct_direction <- matrix(TRUE, nrow=nrow(joined_tabs_with_values[[1]]))
@@ -403,8 +438,6 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
           correct_direction[which(rowSums(t(bumpDirections[[j]] * t(Diff)) < 0) == 0)] <- TRUE
         }
       }
-      controls_come_from_distribution <- TRUE
-      #control <- melt(mat[,])
       
       for (j in 1:length(coef))
       {
