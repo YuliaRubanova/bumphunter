@@ -305,8 +305,11 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     {
       ptime2 <- proc.time()
       comp <- computation.tots.jointly(tabs, V = V, L = L, A = A, 
-         maxGap=maxGap, chr=chr, pos=pos, verbose = verbose,
-         bumpDirections, SamplesToDetermineDirection)
+         maxGap=maxGap, chr=chr, pos=pos, mat=mat, beta = beta, 
+         workers = workers, nulltabs = nulltabs,
+         verbose = verbose,
+         bumpDirections, SamplesToDetermineDirection,
+         SamplesContraintedByDistribution, distribution)
       if (verbose)
       {
         message("[bumphunterEngine] Total time for computation:")
@@ -340,12 +343,12 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         # If there are n covariates of interest, 
         # then every n-th permutation in V and L corresponds to the n-th covariate
         
-        comp <- computation.tots(tab = tab, V = V[indices], L = L[indices])
+        comp <- computation.tots(tab = tab, V = V[indices], L = L[indices], workers, nulltabs)
         rate1 <- comp$rate1
         pvalues1 <- comp$pvalues1
     ##    ptime2 <- proc.time()
         ##ptime1 <- proc.time()
-        comp <- computation.tots2(tab = tab, A = A[indices])
+        comp <- computation.tots2(tab = tab, A = A[indices], workers, nulltabs)
         rate2 <- comp$rate2
         pvalues2 <- comp$pvalues2
         ##ptime2 <- proc.time()

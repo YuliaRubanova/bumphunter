@@ -149,7 +149,7 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
         {
           res_controls <- sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],controls], nrow=1)))
           res_controls <- matrix(res_controls, ncol=1)
-          colnames(res_controls)[1] <- "controls.median" 
+          colnames(res_controls)[1] <- "controls.mean" 
           res[[i]] <- cbind(res[[i]], res_controls)
         }
         
@@ -158,7 +158,7 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
           res_design <- apply(design, 2, function(col) {
             sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
             })
-          colnames(res_design) <- paste0("covariate.median", 1:ncol(design))
+          colnames(res_design) <- paste0("covariate.mean", 1:ncol(design))
           res[[i]] <- cbind(res[[i]], res_design)
         }
       }

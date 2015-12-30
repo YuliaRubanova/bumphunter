@@ -1,6 +1,6 @@
 library(doRNG)
 
-computation.tots <- function(tab, V, L) {
+computation.tots <- function(tab, V, L, workers, nulltabs) {
   Lvalue <- cbind(tab$L, abs(tab$value))
   chunksize <- ceiling(nrow(Lvalue)/workers)
   subL <- NULL
@@ -32,7 +32,7 @@ computation.tots <- function(tab, V, L) {
 
 
 
-computation.tots2 <- function(tab, A) {
+computation.tots2 <- function(tab, A, workers, nulltabs) {
   Avalue <- matrix(tab$area, ncol = 1)
   chunksize <- ceiling(nrow(Avalue)/workers)
   subA <- NULL
@@ -75,7 +75,11 @@ computation.tots2 <- function(tab, A) {
 
 
 
-computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, verbose = F, bumpDirections = NULL, SamplesToDetermineDirection = NULL) {
+computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta, workers,
+                                     nulltabs,
+                                     verbose = F, 
+                                     bumpDirections = NULL, SamplesToDetermineDirection = NULL,
+                                     SamplesContraintedByDistribution = NULL, distribution = NULL) {
   if (verbose)
     message("[bumphunterEngine] Joining bumps.")
   
