@@ -100,7 +100,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
     
     controls_come_from_distribution.distances <-  apply(mat[cpgs$indices, SamplesContraintedByDistribution], 1,
                                                         function(x) {ks.test(x, distribution )$statistic})
-    controls_come_from_distribution <- (controls_come_from_distribution.distances < mean(controls_come_from_distribution.distances))
+    controls_come_from_distribution <- (controls_come_from_distribution.distances < quantile(controls_come_from_distribution.distances)[2])
     if (verbose)
       print(proc.time() - ptime1)
   }
