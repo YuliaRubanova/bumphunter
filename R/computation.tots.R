@@ -99,8 +99,9 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
     ptime1 <- proc.time()
     
     controls_come_from_distribution.distances <-  apply(mat[cpgs$indices, SamplesContraintedByDistribution], 1,
-                                                        function(x) {ks.test(x, distribution )$statistic})
-    controls_come_from_distribution <- (controls_come_from_distribution.distances < quantile(controls_come_from_distribution.distances)[2])
+                                                        function(x) {suppressWarnings(ks.test(x, distribution )$statistic)})
+    controls_come_from_distribution <- (controls_come_from_distribution.distances < 0.6)
+                                          #quantile(controls_come_from_distribution.distances)[2])
     if (verbose)
       print(proc.time() - ptime1)
   }

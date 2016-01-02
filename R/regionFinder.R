@@ -161,6 +161,16 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
           colnames(res_design) <- paste0("covariate.mean", 1:ncol(design))
           res[[i]] <- cbind(res[[i]], res_design)
         }
+        
+        if (!is.null(controls) && !is.null(design) && length(Indexes[[i]]) != 0)
+        {
+          res_design <- apply(design, 2, function(col) {
+            sapply(Indexes[[i]],function(Index) 
+              mean(apply(toHorizontalMatrix(mat[ind[Index],which(col > 0)]),1,mean) - apply(toHorizontalMatrix(mat[ind[Index],controls]), 1,mean)))
+          })
+          colnames(res_design) <- paste0("covariate.diff", 1:ncol(design))
+          res[[i]] <- cbind(res[[i]], res_design)
+        }
       }
     }
     names(res) <- c("up","dn")
