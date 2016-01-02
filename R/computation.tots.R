@@ -98,8 +98,14 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
       message("[bumphunterEngine] Checking that controls come from the distribution.")
     ptime1 <- proc.time()
     
-    controls_come_from_distribution.distances <-  apply(mat[cpgs$indices, SamplesContraintedByDistribution], 1,
-                                                        function(x) {suppressWarnings(ks.test(x, distribution )$statistic)})
+    chunksize <- ceiling(length(cpgs$indices)/workers) 
+
+    controls_come_from_distribution.distances <- foreach(subMat = iter(mat[cpgs$indices, SamplesContraintedByDistribution], by = "row", chunksize = chunksize),
+                   .combine = "c", .packages = "bumphunter") %dorng% {
+                     apply(subMat, 1, function(x) {suppressWarnings(ks.test(x, distribution )$statistic)})
+                   }
+    attributes(controls_come_from_distribution.distances)[["rng"]] <- NULL
+    
     controls_come_from_distribution <- (controls_come_from_distribution.distances < 0.6)
                                           #quantile(controls_come_from_distribution.distances)[2])
     if (verbose)
