@@ -152,7 +152,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
   }
   
   controls <- joined_tabs_with_values[[1]][,grep("controls*", names(joined_tabs_with_values[[1]]))]
-  covariates <- joined_tabs_with_values[[1]][,grep("covariate*", names(joined_tabs_with_values[[1]]))]
+  covariates <- joined_tabs_with_values[[1]][,grep("covariate.mean*", names(joined_tabs_with_values[[1]]))]
   Diff <- covariates - controls
   colnames(Diff) <- paste0("covariate.diff", 1:length(coef))
   
