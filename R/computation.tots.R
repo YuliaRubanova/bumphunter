@@ -106,8 +106,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
                    }
     attributes(controls_come_from_distribution.distances)[["rng"]] <- NULL
     
-    controls_come_from_distribution <- (controls_come_from_distribution.distances < 0.6)
-                                          #quantile(controls_come_from_distribution.distances)[2])
+    controls_come_from_distribution <- (controls_come_from_distribution.distances < quantile(controls_come_from_distribution.distances)[2])
     if (verbose)
       print(proc.time() - ptime1)
   }
