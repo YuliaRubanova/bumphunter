@@ -228,8 +228,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
       
       res <- sapply(seq(along = V), function(i) {
         sum(BiggerNullBumpIndicesForPermutation(L[[i]], FoundBumpsLs) & 
-              BiggerNullBumpIndicesForPermutation(sapply(V[[i]],abs), FoundBumpsValues)  &
-              controls_come_from_distribution)
+              BiggerNullBumpIndicesForPermutation(sapply(V[[i]],abs), FoundBumpsValues))
       })
       c(mean(res > 0), sum(res))
     }))

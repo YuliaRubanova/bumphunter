@@ -55,6 +55,8 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            distribution = NULL,
                            ...){
     nullMethod  <- match.arg(nullMethod)
+    cluster <- NULL
+    Index <- NULL
     if (is.null(B))  B = 0
     if (!is.matrix(permutations) & !is.null(permutations)) stop("permutations must be NULL or a matrix.")
     if (!is.null(permutations)) {
@@ -267,14 +269,14 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                   nrow(tabs[[j]])))
       }
     
-      if (B < 1) {
-          return(list(table = tabs[[j]], coef = rawBeta, fitted = beta,
-              pvaluesMarginal = NA))
-      }
+      #if (B < 1) {
+      #    return(list(table = tabs[[j]], coef = rawBeta, fitted = beta,
+      #        pvaluesMarginal = NA))
+      #}
     }
     if (verbose)
         message("[bumphunterEngine] Computing regions for each ",nullMethod,".")
-    chunksize <- ceiling(B/workers)
+    chunksize <- ceiling(B * length(coef)/workers)
     subMat <- NULL
     
     nulltabs <- foreach(subMat = iter(permBeta, by = "col", chunksize = chunksize),
