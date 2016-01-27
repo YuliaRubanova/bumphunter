@@ -96,10 +96,10 @@ clusterMaker <- function(chr, pos, assumeSorted = FALSE, maxGap=300){
 
 ##you can pass cutoff through the ...
 regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
-                         ind=seq(along=getLengthMatrixOrVector(x)),order=TRUE, oneTable=TRUE,
+                         ind=seq(1:getLengthMatrixOrVector(x)),order=TRUE, oneTable=TRUE,
                          maxGap=300, cutoff=quantile(abs(x), 0.99),
                          assumeSorted = FALSE, verbose = TRUE, 
-                         addMeans = F, mat=NULL, design=NULL, controls=NULL, 
+                         addMeans = F, mat=NULL, design=NULL, 
                          Indexes=NULL, clusterInSelectedPositions=F){
     x <- as.matrix(x)
     if(any(is.na(x[ind,]))){
@@ -145,29 +145,36 @@ regionFinder <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
       
       if (addMeans & !is.null(mat))
       {
-        if (!is.null(controls))
-        {
-          res_controls <- sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],controls], nrow=1)))
-          res_controls <- matrix(res_controls, ncol=1)
-          colnames(res_controls)[1] <- "controls.mean" 
-          res[[i]] <- cbind(res[[i]], res_controls)
-        }
-        
         if (!is.null(design) && length(Indexes[[i]]) != 0)
         {
-          res_design <- apply(design, 2, function(col) {
+          
+          toHorizontalMatrix <- function(L)
+          {
+            if (is.vector(L))
+              return(matrix(L, nrow=1))
+            else 
+              return(as.matrix(L))
+          }
+          
+          # Compute mean of control samples
+          res_controls <- toHorizontalMatrix(apply(design, 2, function(col) {
+            sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],which(col < 0)], nrow=1)))
+          }))
+          colnames(res_controls) <- paste0("controls.mean", 1:ncol(design))
+          res[[i]] <- cbind(res[[i]], res_controls)
+
+          # Compute mean meth values for each covariate
+          res_design <- toHorizontalMatrix(apply(design, 2, function(col) {
             sapply(Indexes[[i]],function(Index) mean(matrix(mat[ind[Index],which(col > 0)], nrow=1)))
-            })
+            }))
           colnames(res_design) <- paste0("covariate.mean", 1:ncol(design))
           res[[i]] <- cbind(res[[i]], res_design)
-        }
-        
-        if (!is.null(controls) && !is.null(design) && length(Indexes[[i]]) != 0)
-        {
-          res_design <- apply(design, 2, function(col) {
+
+          # Compute methylation difference for each covariate
+          res_design <- toHorizontalMatrix(apply(design, 2, function(col) {
             sapply(Indexes[[i]],function(Index) 
-              mean(apply(toHorizontalMatrix(mat[ind[Index],which(col > 0)]),1,mean) - apply(toHorizontalMatrix(mat[ind[Index],controls]), 1,mean)))
-          })
+              mean(apply(toHorizontalMatrix(mat[ind[Index],which(col > 0)]),1,mean) - apply(toHorizontalMatrix(mat[ind[Index],which(col < 0)]), 1,mean)))
+          }))
           colnames(res_design) <- paste0("covariate.diff", 1:ncol(design))
           res[[i]] <- cbind(res[[i]], res_design)
         }

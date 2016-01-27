@@ -55,8 +55,14 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            distribution = NULL,
                            ...){
     nullMethod  <- match.arg(nullMethod)
+    
     cluster <- NULL
     Index <- NULL
+    smooth <- FALSE
+    permutations <- NULL
+    useWeights = FALSE
+    verbose = TRUE
+    nullMethod <- "permutation"
     if (is.null(B))  B = 0
     if (!is.matrix(permutations) & !is.null(permutations)) stop("permutations must be NULL or a matrix.")
     if (!is.null(permutations)) {
@@ -157,7 +163,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
           null_model_matrix <- c(null_model_matrix, nullmodel_coef)
           null_model_matrix <- mat[, null_model_matrix]
 
-          permRawBeta <- MultiTargetGetEstimate(null_model_matrix, design, coef, B, permutations, full = FALSE)
+          permRawBeta <- MultiTargetGetEstimate(null_model_matrix, design, coef, B=B, permutations, full = FALSE)
           #permRawBeta <- MultiTargetGetEstimate(mat[,nullmodel_coef], design_null, coef,B, permutations, full = FALSE)
           weights <- NULL
       #}
@@ -256,7 +262,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     for (j in 1:length(coef))
     {
       tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
-        cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, controls=SamplesToDetermineDirection)
+        cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design)
         
       if (nrow(tabs[[j]]) == 0) {
           if (verbose)
@@ -280,18 +286,24 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     subMat <- NULL
     
     nulltabs <- foreach(subMat = iter(permBeta, by = "col", chunksize = chunksize),
-          .combine = "c", .packages = "bumphunter") %dorng% {
+          .combine = "c") %dorng% {
+            
+          source("bumphunter/R/regionFinder.R")
+          source("bumphunter/R/utils.R")
+          
           apply(subMat, 2, regionFinder, chr = chr, pos = pos,
               cluster = cluster, cutoff = cutoff, ind = Index,
-              verbose = FALSE)
+              verbose = FALSE,  addMeans = T, mat=mat, design=design)
       }
     attributes(nulltabs[[j]])[["rng"]] <- NULL
     
     if (verbose)
         message("[bumphunterEngine] Estimating p-values and FWER.")
-    L <- V <- A <- as.list(rep(0, B * length(coef)))
+    D <- L <- V <- A <- as.list(rep(0, B * length(coef)))
     for (i in 1:(B * length(coef))) {
         nulltab <- nulltabs[[i]]
+        current_coef <- if (i %% length(coef) == 0) length(coef) else (i %% length(coef))
+        
         if (nrow(nulltab) > 0) {
             # Values per permutation
             # If there are n covariates of interest, 
@@ -299,6 +311,8 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             L[[i]] <- nulltab$L
             V[[i]] <- nulltab$value
             A[[i]] <- nulltab$area
+            if (paste0("covariate.diff", current_coef) %in% colnames(nulltab))
+              D[[i]] <- nulltab[,paste0("covariate.diff", current_coef)]
         }
     }
 
@@ -306,9 +320,9 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     if (computePValuesJointly)
     {
       ptime2 <- proc.time()
-      comp <- computation.tots.jointly(tabs, V = V, L = L, A = A, 
+      comp <- computation.tots.jointly(tabs, V = V, L = L, A = A, D = D,
          maxGap=maxGap, chr=chr, pos=pos, mat=mat, beta = beta, 
-         workers = workers, nulltabs = nulltabs,
+         workers = workers, nulltabs = nulltabs, coef=coef,
          verbose = verbose,
          bumpDirections, SamplesToDetermineDirection,
          SamplesContraintedByDistribution, distribution)

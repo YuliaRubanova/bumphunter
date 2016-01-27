@@ -5,7 +5,7 @@ MultiTargetGetEstimate <- function(mat, design, coef, B=NULL, permutations=NULL,
     qa <- qr(A)
     S <- diag(nrow(A)) - tcrossprod(qr.Q(qa))
 
-    vv <- if (is.null(B) || (!is.null(nullmodel_coef) & B == 1)) as.matrix(v) else{
+    vv <- if (is.null(B)) as.matrix(v) else{
         if(is.null(permutations)){
             if (length(coef) == 1)
             {

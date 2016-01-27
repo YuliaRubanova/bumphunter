@@ -75,8 +75,8 @@ computation.tots2 <- function(tab, A, workers, nulltabs) {
 
 
 
-computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta, workers,
-                                     nulltabs,
+computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, beta, workers,
+                                     nulltabs, coef,
                                      verbose = F, 
                                      bumpDirections = NULL, SamplesToDetermineDirection = NULL,
                                      SamplesContraintedByDistribution = NULL, distribution = NULL) {
@@ -101,7 +101,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
     chunksize <- ceiling(length(cpgs$indices)/workers) 
 
     controls_come_from_distribution.distances <- foreach(subMat = iter(mat[cpgs$indices, SamplesContraintedByDistribution], by = "row", chunksize = chunksize),
-                   .combine = "c", .packages = "bumphunter") %dorng% {
+                   .combine = "c") %dorng% {
                      apply(subMat, 1, function(x) {suppressWarnings(ks.test(x, distribution )$statistic)})
                    }
     attributes(controls_come_from_distribution.distances)[["rng"]] <- NULL
@@ -142,7 +142,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
   {
     joined_tabs_with_values[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster=cluster,
                                                  cutoff = cutoff, ind = ind, verbose = FALSE, 
-                                                 addMeans = T, mat=mat, design=design, controls=SamplesToDetermineDirection, 
+                                                 addMeans = T, mat=mat, design=design,
                                                  Indexes=Indexes, clusterInSelectedPositions=T)
     joined_tabs_with_values[[j]] <- joined_tabs_with_values[[j]][order(joined_tabs_with_values[[j]]$chr, joined_tabs_with_values[[j]]$start,joined_tabs_with_values[[j]]$end),]
     # The elements of the lists are Lvalues for each covariate of interest
@@ -150,10 +150,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
     AvalueList[[j]] <- cbind.data.frame(area=joined_tabs_with_values[[j]]$area)
   }
   
-  controls <- joined_tabs_with_values[[1]][,grep("controls*", names(joined_tabs_with_values[[1]]))]
-  covariates <- joined_tabs_with_values[[1]][,grep("covariate.mean*", names(joined_tabs_with_values[[1]]))]
-  Diff <- covariates - controls
-  colnames(Diff) <- paste0("covariate.diff", 1:length(coef))
+  Diff <- joined_tabs_with_values[[1]][,grep("covariate.diff*", names(joined_tabs_with_values[[1]]))]
   
   # Control that bumps have one of the directions specified by bumpDirections
   if (is.null(SamplesToDetermineDirection) || is.null(bumpDirections))
@@ -173,21 +170,22 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
     LvalueList[[j]] <- LvalueList[[j]][correct_direction, ]
     AvalueList[[j]] <- cbind.data.frame(area=AvalueList[[j]][correct_direction, ])
   }
+  Diff <- Diff[correct_direction,]
   
   Ls <- sapply(LvalueList, function(x) {x$L})
   values <- sapply(LvalueList, function(x) {x$value})
-  Lvalue <- cbind(Ls, values)
+  #Lvalue <- cbind(Ls, values)
+  LDiff <- cbind(Ls, Diff)
   Avalue <- sapply(AvalueList, function(x) {x$area})
-  
   
 
   if (verbose)
     message("[bumphunterEngine] Computing p-values....")
   ptime1 <- proc.time()
   
-  chunksize <- ceiling(nrow(Lvalue)/workers)
+  chunksize <- ceiling(nrow(LDiff)/workers)
   subL <- NULL
-  tots <- foreach(subL = iter(Lvalue, by = "row", chunksize = chunksize),
+  tots <- foreach(subL = iter(LDiff, by = "row", chunksize = chunksize),
                   .combine = "cbind", .packages = "bumphunter") %dorng%
   {
     
@@ -206,7 +204,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
     
     toHorizontalMatrix(apply(subL, 1, function(x) {
       FoundBumpsLs <- x[1:(length(x)/2)]
-      FoundBumpsValues <- x[((length(x)/2)+1):length(x)]
+      FoundBumpsDiff  <- x[((length(x)/2)+1):length(x)]
       
       BiggerNullBumpIndicesForPermutation <- function(list_for_comparison, value)
       {
@@ -226,9 +224,9 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
         return(res)
       }
       
-      res <- sapply(seq(along = V), function(i) {
+      res <- sapply(seq(along = D), function(i) {
         sum(BiggerNullBumpIndicesForPermutation(L[[i]], FoundBumpsLs) & 
-              BiggerNullBumpIndicesForPermutation(sapply(V[[i]],abs), FoundBumpsValues))
+              BiggerNullBumpIndicesForPermutation(sapply(D[[i]],abs), FoundBumpsDiff))
       })
       c(mean(res > 0), sum(res))
     }))
@@ -287,8 +285,7 @@ computation.tots.jointly <- function(tabs, V, L, A, maxGap, chr, pos, mat, beta,
       correct_direction <- TRUE
       
       sapply(seq(along = A), function(i) {
-        sum(BiggerNullBumpIndicesForPermutation(A[[i]], x) &
-              controls_come_from_distribution)
+        sum(BiggerNullBumpIndicesForPermutation(A[[i]], x))
       })
     })))
   }
