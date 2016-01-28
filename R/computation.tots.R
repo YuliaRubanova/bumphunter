@@ -206,10 +206,14 @@ computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, be
       FoundBumpsLs <- x[1:(length(x)/2)]
       FoundBumpsDiff  <- x[((length(x)/2)+1):length(x)]
       
-      BiggerNullBumpIndicesForPermutation <- function(list_for_comparison, value)
+      BiggerNullBumpIndicesForPermutation <- function(list_for_comparison, value, pairwise=F)
       {
         tmp <- sapply(1:length(value), function(j) {
-          greaterOrEqual(list_for_comparison, value[j])
+          if (pairwise & !is.vector(list_for_comparison))
+            to_compare <- list_for_comparison[,j]
+          else
+            to_compare <- list_for_comparison
+          greaterOrEqual(to_compare, value[j])
         } )
         return(LogicalAnd(tmp))
       }
@@ -226,7 +230,7 @@ computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, be
       
       res <- sapply(seq(along = D), function(i) {
         sum(BiggerNullBumpIndicesForPermutation(L[[i]], FoundBumpsLs) & 
-              BiggerNullBumpIndicesForPermutation(sapply(D[[i]],abs), FoundBumpsDiff))
+              BiggerNullBumpIndicesForPermutation(abs(D[[i]]), FoundBumpsDiff, pairwise=T))
       })
       c(mean(res > 0), sum(res))
     }))

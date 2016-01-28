@@ -262,7 +262,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     for (j in 1:length(coef))
     {
       tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
-        cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design)
+        cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, maxGap=maxGap)
         
       if (nrow(tabs[[j]]) == 0) {
           if (verbose)
@@ -285,6 +285,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     chunksize <- ceiling(B * length(coef)/workers)
     subMat <- NULL
     
+    ptime2 <- proc.time()
     nulltabs <- foreach(subMat = iter(permBeta, by = "col", chunksize = chunksize),
           .combine = "c") %dorng% {
             
@@ -293,16 +294,18 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
           
           apply(subMat, 2, regionFinder, chr = chr, pos = pos,
               cluster = cluster, cutoff = cutoff, ind = Index,
-              verbose = FALSE,  addMeans = T, mat=mat, design=design)
+              verbose = FALSE,  addMeans = T, mat=mat, design=design, maxGap=maxGap)
       }
     attributes(nulltabs[[j]])[["rng"]] <- NULL
     
+    print(proc.time()-ptime2)
+
     if (verbose)
         message("[bumphunterEngine] Estimating p-values and FWER.")
     D <- L <- V <- A <- as.list(rep(0, B * length(coef)))
     for (i in 1:(B * length(coef))) {
         nulltab <- nulltabs[[i]]
-        current_coef <- if (i %% length(coef) == 0) length(coef) else (i %% length(coef))
+        #current_coef <- if (i %% length(coef) == 0) length(coef) else (i %% length(coef))
         
         if (nrow(nulltab) > 0) {
             # Values per permutation
@@ -312,7 +315,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             V[[i]] <- nulltab$value
             A[[i]] <- nulltab$area
             if (paste0("covariate.diff", current_coef) %in% colnames(nulltab))
-              D[[i]] <- nulltab[,paste0("covariate.diff", current_coef)]
+              D[[i]] <- nulltab[,paste0("covariate.diff", 1:length(coef))]
         }
     }
 
