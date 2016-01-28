@@ -175,7 +175,7 @@ computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, be
   Ls <- sapply(LvalueList, function(x) {x$L})
   values <- sapply(LvalueList, function(x) {x$value})
   #Lvalue <- cbind(Ls, values)
-  LDiff <- cbind(Ls, Diff)
+  LDiff <- cbind(Ls, abs(Diff))
   Avalue <- sapply(AvalueList, function(x) {x$area})
   
 
