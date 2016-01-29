@@ -163,8 +163,8 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
           null_model_matrix <- c(null_model_matrix, nullmodel_coef)
           null_model_matrix <- mat[, null_model_matrix]
 
-          permRawBeta <- MultiTargetGetEstimate(null_model_matrix, design, coef, B=B, permutations, full = FALSE)
-          #permRawBeta <- MultiTargetGetEstimate(mat[,nullmodel_coef], design_null, coef,B, permutations, full = FALSE)
+          permRawBeta <- MultiTargetGetEstimate(null_model_matrix, design, coef, B, permutations, full = FALSE)
+
           weights <- NULL
       #}
           NullBeta<-permRawBeta  
@@ -314,7 +314,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             L[[i]] <- nulltab$L
             V[[i]] <- nulltab$value
             A[[i]] <- nulltab$area
-            if (paste0("covariate.diff", current_coef) %in% colnames(nulltab))
+            if (sum(grepl("covariate.diff*", colnames(nulltab))) > 0)
               D[[i]] <- nulltab[,paste0("covariate.diff", 1:length(coef))]
         }
     }
