@@ -178,6 +178,15 @@ computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, be
   LDiff <- cbind(Ls, abs(Diff))
   Avalue <- sapply(AvalueList, function(x) {x$area})
   
+  nullmodel_opposite_directions <- vector("list", length=length(D))
+  for (i in 1:length(nullmodel_opposite_directions))
+  {
+    nullmodel_opposite_directions[[i]] <- matrix(FALSE, nrow=nrow(D[[i]]))
+    for (j in 1:length(bumpDirections))
+    {
+      nullmodel_opposite_directions[[i]][which(rowSums(t(bumpDirections[[j]] * t(D[[i]])) < 0) == 0)] <- TRUE
+    }
+  }
 
   if (verbose)
     message("[bumphunterEngine] Computing p-values....")
@@ -227,10 +236,11 @@ computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, be
         }
         return(res)
       }
-      
+
       res <- sapply(seq(along = D), function(i) {
         sum(BiggerNullBumpIndicesForPermutation(L[[i]], FoundBumpsLs) & 
-              BiggerNullBumpIndicesForPermutation(abs(D[[i]]), FoundBumpsDiff, pairwise=T))
+              BiggerNullBumpIndicesForPermutation(abs(D[[i]]), FoundBumpsDiff, pairwise=T) &
+              nullmodel_opposite_directions[[i]])
       })
       c(mean(res > 0), sum(res))
     }))

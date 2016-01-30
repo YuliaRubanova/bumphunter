@@ -314,8 +314,11 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             L[[i]] <- nulltab$L
             V[[i]] <- nulltab$value
             A[[i]] <- nulltab$area
+
             if (sum(grepl("covariate.diff*", colnames(nulltab))) > 0)
+            {
               D[[i]] <- nulltab[,paste0("covariate.diff", 1:length(coef))]
+            }
         }
     }
 
