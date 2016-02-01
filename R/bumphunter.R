@@ -56,6 +56,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            ...){
     nullMethod  <- match.arg(nullMethod)
     
+    pickCutoff=FALSE
     cluster <- NULL
     Index <- NULL
     smooth <- FALSE
@@ -305,7 +306,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     D <- L <- V <- A <- as.list(rep(0, B * length(coef)))
     for (i in 1:(B * length(coef))) {
         nulltab <- nulltabs[[i]]
-        #current_coef <- if (i %% length(coef) == 0) length(coef) else (i %% length(coef))
+        current_coef <- if (i %% length(coef) == 0) length(coef) else (i %% length(coef))
         
         if (nrow(nulltab) > 0) {
             # Values per permutation
@@ -315,9 +316,13 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
             V[[i]] <- nulltab$value
             A[[i]] <- nulltab$area
 
-            if (sum(grepl("covariate.diff*", colnames(nulltab))) > 0)
+            if (computePValuesJointly)
             {
-              D[[i]] <- nulltab[,paste0("covariate.diff", 1:length(coef))]
+               D[[i]] <- nulltab[,paste0("covariate.diff", 1:length(coef))]
+            }
+            else
+            {
+              D[[i]] <- nulltab[,paste0("covariate.diff", current_coef)]
             }
         }
     }
@@ -365,12 +370,13 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         # If there are n covariates of interest, 
         # then every n-th permutation in V and L corresponds to the n-th covariate
         
-        comp <- computation.tots(tab = tab, V = V[indices], L = L[indices], workers, nulltabs)
+        comp <- computation.tots(tab = tab, V = V[indices], L = L[indices], 
+                                 D = D[indices], workers, nulltabs = nulltabs[indices], current_covariate=j)
         rate1 <- comp$rate1
         pvalues1 <- comp$pvalues1
     ##    ptime2 <- proc.time()
         ##ptime1 <- proc.time()
-        comp <- computation.tots2(tab = tab, A = A[indices], workers, nulltabs)
+        comp <- computation.tots2(tab = tab, A = A[indices], workers, nulltabs = nulltabs[indices])
         rate2 <- comp$rate2
         pvalues2 <- comp$pvalues2
         ##ptime2 <- proc.time()

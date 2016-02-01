@@ -1,22 +1,43 @@
 library(doRNG)
 
-computation.tots <- function(tab, V, L, workers, nulltabs) {
-  Lvalue <- cbind(tab$L, abs(tab$value))
-  chunksize <- ceiling(nrow(Lvalue)/workers)
+computation.tots <- function(tab, V, L, D, workers, nulltabs, current_covariate) {
+  LDiff <- cbind(tab$L, abs(tab[,paste0("covariate.diff", current_covariate)]))
+  chunksize <- ceiling(nrow(LDiff)/workers)
   subL <- NULL
-  tots <- foreach(subL = iter(Lvalue, by = "row", chunksize = chunksize),
+  tots <- foreach(subL = iter(LDiff, by = "row", chunksize = chunksize),
                   .combine = "cbind", .packages = "bumphunter") %dorng%
   {
     greaterOrEqual <- function(x,y) {
       precision <- sqrt(.Machine$double.eps)
       (x >= y) | (abs(x-y) <= precision)
     }
+
+    BiggerNullBumpIndicesForPermutation <- function(list_for_comparison, value, pairwise=F)
+    {
+      tmp <- sapply(1:length(value), function(j) {
+        if (pairwise & !is.vector(list_for_comparison))
+          to_compare <- list_for_comparison[,j]
+        else
+          to_compare <- list_for_comparison
+        greaterOrEqual(to_compare, value[j])
+      } )
+      return(LogicalAnd(tmp))
+    }
+    
+    LogicalAnd <- function(a)
+    {
+      res <- TRUE
+      for (i in 1:ncol(a))
+      {
+        res <- res & a[,i]
+      }
+      return(res)
+    }
     
     apply(subL, 1, function(x) {
-      # !!! fix seq(along = V) here
-      res <- sapply(seq(along = V), function(i) {
+      res <- sapply(seq(along = D), function(i) {
         sum(greaterOrEqual(L[[i]], x[1]) &
-              greaterOrEqual(abs(V[[i]]),
+              greaterOrEqual(abs(D[[i]]),
                              x[2]))
       })
       c(mean(res > 0), sum(res))
