@@ -256,7 +256,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         if (verbose)
             message(sprintf("[bumphunterEngine] cutoff: %s",
                 round(cutoff, 3)))
-    }
+    } 
     if (verbose)
         message("[bumphunterEngine] Finding regions.")
     tabs <- list()
