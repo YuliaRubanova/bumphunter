@@ -309,7 +309,7 @@ findIntersection <- function(tabs, maxGap=maxGap)
     to_merge <- c(FALSE, (intersection[2:nrow(intersection), ]$start - intersection[1:(nrow(intersection)-1), ]$end < maxGap))
     while(sum(to_merge) != 0)
     {
-      last_region_of_group <- to_merge & c(!to_merge[2:length(to_merge)], FALSE)
+      last_region_of_group <- to_merge & c(!to_merge[2:length(to_merge)], TRUE)
       merged_from <- which(last_region_of_group)
       merged_to <- which(last_region_of_group) - 1
       
