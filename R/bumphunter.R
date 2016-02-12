@@ -259,10 +259,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     } 
     if (verbose)
         message("[bumphunterEngine] Finding regions.")
-    tabs <- list()
-    for (j in 1:length(coef))
-    {
-      tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
+      tabs <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
         cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, maxGap=maxGap)
         
       if (nrow(tabs[[j]]) == 0) {

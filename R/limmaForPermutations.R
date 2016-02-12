@@ -18,11 +18,39 @@ MultiTargetGetEstimate <- function(mat, design, coef, B=NULL, permutations=NULL,
         }
     }
     
-    sv <- S %*% vv
-
-    vsv <- diag(crossprod(vv,sv))
+    # Make a matrix with normalizing coefficients. Normalizing coefficients should be coherent with design matrix
+    multipliers <- apply(vv, 2, function(col)
+                    { 
+                      cases <- which(col > 0)
+                      controls <- which(col < 0)
+                      
+                      col_with_multipliers <- col
+                      col_with_multipliers[cases] <- 1/length(cases)
+                      col_with_multipliers[controls] <- -1/length(controls)
+                      col_with_multipliers
+                    })
     
-    b <- (mat %*% crossprod(S, vv)) / vsv
+    
+    #sv <- S %*% vv
+    #vsv <- diag(crossprod(vv,sv))
+    #b <- (mat %*% crossprod(S, vv)) / vsv
+    
+    b <- (mat %*% crossprod(S, multipliers))
+    b <- abs(b)
+    
+    # If there are several case types, we search for bumps in them simultaneously. 
+    # Meth differences in different case types are summed.
+    if (length(coef) > 1)
+    {
+      new_b <- b[,seq(1,ncol(b),length(coef))]
+      
+      for (i in 2:length(coef))
+      {
+        new_b <- new_b + b[,seq(i,ncol(b),length(coef))]
+      }
+    }
+    
+    b <- new_b
     
     if(!is.matrix(b))
         b <- matrix(b, ncol = 1)
