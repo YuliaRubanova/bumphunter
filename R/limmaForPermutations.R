@@ -11,7 +11,7 @@ MultiTargetGetEstimate <- function(mat, design, coef, B=NULL, permutations=NULL,
             {
               replicate(B, sample(v))
             } else {
-              do.call(cbind, replicate(B, v[sample(nrow(v)),], simplify=F))
+              do.call(cbind, replicate(B, v[sample(nrow(v)),], simplify = FALSE))
             }
         } else{
             apply(permutations,2,function(i) v[i])
@@ -30,27 +30,11 @@ MultiTargetGetEstimate <- function(mat, design, coef, B=NULL, permutations=NULL,
                       col_with_multipliers
                     })
     
-    
     #sv <- S %*% vv
     #vsv <- diag(crossprod(vv,sv))
     #b <- (mat %*% crossprod(S, vv)) / vsv
     
     b <- (mat %*% crossprod(S, multipliers))
-    b <- abs(b)
-    
-    # If there are several case types, we search for bumps in them simultaneously. 
-    # Meth differences in different case types are summed.
-    if (length(coef) > 1)
-    {
-      new_b <- b[,seq(1,ncol(b),length(coef))]
-      
-      for (i in 2:length(coef))
-      {
-        new_b <- new_b + b[,seq(i,ncol(b),length(coef))]
-      }
-    }
-    
-    b <- new_b
     
     if(!is.matrix(b))
         b <- matrix(b, ncol = 1)

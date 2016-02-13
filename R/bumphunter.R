@@ -259,49 +259,83 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     } 
     if (verbose)
         message("[bumphunterEngine] Finding regions.")
-      tabs <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
-        cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, maxGap=maxGap)
-        
-      if (nrow(tabs[[j]]) == 0) {
-          if (verbose)
-              message("[bumphunterEngine] No bumps found!")
-          return(list(table = NA, coef = rawBeta, fitted = beta,
-              pvaluesMarginal = NA))
-      } else {
-          if (verbose)
-              message(sprintf("[bumphunterEngine] Found %s bumps.",
-                  nrow(tabs[[j]])))
-      }
     
-      #if (B < 1) {
-      #    return(list(table = tabs[[j]], coef = rawBeta, fitted = beta,
-      #        pvaluesMarginal = NA))
-      #}
+    if (computePValuesJointly)
+    {
+      tabs <- regionFinderJointly(x = beta, chr = chr, pos = pos, cluster = cluster,
+        cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, maxGap=maxGap)
+      
+      if (nrow(tabs) == 0) {
+        if (verbose)
+          message("[bumphunterEngine] No bumps found!")
+        return(list(table = NA, coef = rawBeta, fitted = beta,
+                    pvaluesMarginal = NA))
+      } else {
+        if (verbose)
+          message(sprintf("[bumphunterEngine] Found %s bumps.",
+                          nrow(tabs)))
+      }
+    } else {
+      tabs <- list()
+      for (j in 1:length(coef))
+      {
+        tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
+          cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, maxGap=maxGap)
+        
+        if (nrow(tabs[[j]]) == 0) {
+          if (verbose)
+            message("[bumphunterEngine] No bumps found!")
+          return(list(table = NA, coef = rawBeta, fitted = beta,
+                      pvaluesMarginal = NA))
+        } else {
+          if (verbose)
+            message(sprintf("[bumphunterEngine] Found %s bumps.",
+                            nrow(tabs[[j]])))
+        }
+      }
     }
+  
+#     if (B < 1)
+#         return(list(table = tabs, coef = rawBeta, fitted = beta,
+#             pvaluesMarginal = NA))
+
     if (verbose)
         message("[bumphunterEngine] Computing regions for each ",nullMethod,".")
-    chunksize <- ceiling(B * length(coef)/workers)
+
+    permBeta.list <- list()
+    for (i in 1:B)
+    {
+      permBeta.list[[i]] <- permBeta[,(i-1)*length(coef) + 1:length(coef)]
+    }
+
     subMat <- NULL
     
     ptime2 <- proc.time()
-    nulltabs <- foreach(subMat = iter(permBeta, by = "col", chunksize = chunksize),
-          .combine = "c") %dorng% {
+    nulltabs <- foreach(subMat = permBeta.list, .combine = "c") %dorng% {
             
           source("bumphunter/R/regionFinder.R")
           source("bumphunter/R/utils.R")
           
-          apply(subMat, 2, regionFinder, chr = chr, pos = pos,
-              cluster = cluster, cutoff = cutoff, ind = Index,
-              verbose = FALSE,  addMeans = T, mat=mat, design=design, maxGap=maxGap)
+          if (computePValuesJointly)
+          {
+            list(regionFinderJointly(subMat, chr = chr, pos = pos,
+                  cluster = cluster, cutoff = cutoff/2, ind = Index,
+                  verbose = FALSE,  addMeans = T, mat=mat, design=design, maxGap=maxGap))
+          } else {
+            apply(subMat, 2, regionFinder, chr = chr, pos = pos,
+                  cluster = cluster, cutoff = cutoff, ind = Index,
+                  verbose = FALSE,  addMeans = T, mat=mat, design=design, maxGap=maxGap)
+          }
       }
-    attributes(nulltabs[[j]])[["rng"]] <- NULL
+    attributes(nulltabs)[["rng"]] <- NULL
     
     print(proc.time()-ptime2)
 
     if (verbose)
         message("[bumphunterEngine] Estimating p-values and FWER.")
-    D <- L <- V <- A <- as.list(rep(0, B * length(coef)))
-    for (i in 1:(B * length(coef))) {
+    nullmodel_size <- ifelse(computePValuesJointly, B, B*length(coef))
+    D <- L <- V <- A <- as.list(rep(0, nullmodel_size))
+    for (i in 1:nullmodel_size) {
         nulltab <- nulltabs[[i]]
         current_coef <- if (i %% length(coef) == 0) length(coef) else (i %% length(coef))
         

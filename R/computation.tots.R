@@ -104,7 +104,8 @@ computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, be
   if (verbose)
     message("[bumphunterEngine] Joining bumps.")
   
-  joined_tabs <- findIntersection(tabs, maxGap = maxGap)
+  #joined_tabs <- findIntersection(tabs, maxGap = maxGap)
+  joined_tabs <- tabs[order(tabs$chr, tabs$start, tabs$end),]
   
   all_cpg = cbind.data.frame(CHR=unlist(lapply(chr, as.character)), MAPINFO=pos, stringsAsFactors=F)
   cpgs = find_cpg_in_table(joined_tabs, all_cpg, region_names=1:nrow(joined_tabs), returnIndices=T)
