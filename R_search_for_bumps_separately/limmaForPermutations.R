@@ -1,5 +1,5 @@
 MultiTargetGetEstimate <- function(mat, design, coef, B=NULL, permutations=NULL,
-                         full=FALSE, diff_between_means=T) {
+                         full=FALSE) {
     v <- design[,coef]
     A <- design[,-coef, drop=FALSE]
     qa <- qr(A)
@@ -11,34 +11,18 @@ MultiTargetGetEstimate <- function(mat, design, coef, B=NULL, permutations=NULL,
             {
               replicate(B, sample(v))
             } else {
-              do.call(cbind, replicate(B, v[sample(nrow(v)),], simplify = FALSE))
+              do.call(cbind, replicate(B, v[sample(nrow(v)),], simplify=F))
             }
         } else{
             apply(permutations,2,function(i) v[i])
         }
     }
     
-    b <- NULL
-    if (diff_between_means)
-    {  
-      # Make a matrix with normalizing coefficients. Normalizing coefficients should be coherent with design matrix
-      multipliers <- apply(vv, 2, function(col)
-      { 
-        cases <- which(col > 0)
-        controls <- which(col < 0)
-        
-        col_with_multipliers <- col
-        col_with_multipliers[cases] <- 1/length(cases)
-        col_with_multipliers[controls] <- -1/length(controls)
-        col_with_multipliers
-      })
+    sv <- S %*% vv
+
+    vsv <- diag(crossprod(vv,sv))
     
-      b <- (mat %*% crossprod(S, multipliers))
-    } else {
-      sv <- S %*% vv
-      vsv <- diag(crossprod(vv,sv))
-      b <- (mat %*% crossprod(S, vv)) / vsv
-    }
+    b <- (mat %*% crossprod(S, vv)) / vsv
     
     if(!is.matrix(b))
         b <- matrix(b, ncol = 1)

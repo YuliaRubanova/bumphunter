@@ -50,7 +50,7 @@ getSegments <- function(x, f = NULL, cutoff=quantile(abs(x), 0.99), assumeSorted
         
     if(verbose) message("getSegments: segmenting")
     Indexes <- split(seq(getLengthMatrixOrVector(x)), f)
-
+    # !!! Check that this works fine
     direction <- as.integer(greaterOrEqual(x, cutoff[2]))
     direction[x <= cutoff[1]] <- -1L
 
@@ -92,76 +92,6 @@ clusterMaker <- function(chr, pos, assumeSorted = FALSE, maxGap=300){
         LAST <- max(z) + LAST
     }
     clusterIDs
-}
-
-regionFinderJointly <- function(x, chr, pos, cluster=NULL, y=x, summary=mean,
-                                ind=seq(1:getLengthMatrixOrVector(x)),order=TRUE, oneTable=TRUE,
-                                maxGap=300, cutoff=quantile(abs(x), 0.99),
-                                assumeSorted = FALSE, verbose = TRUE, 
-                                addMeans = F, mat=NULL, design=NULL, 
-                                Indexes=NULL, clusterInSelectedPositions=F) {
-  
-   x.summed <- as.matrix(rowSums(abs(x)))
-   regions_jointly <- regionFinder(x.summed, chr, pos, cluster, summary=summary,
-                ind=ind,order=order, oneTable=T,
-                maxGap=maxGap, cutoff=cutoff*2,
-                assumeSorted = assumeSorted, verbose = verbose, 
-                addMeans = addMeans, mat=mat, design=design, 
-                Indexes=Indexes, clusterInSelectedPositions=clusterInSelectedPositions)
-   
-   regions_separately <- list()
-   for (i in 1:ncol(x))
-   {
-     regions_separately[[i]] <- regionFinder(x[,i], chr, pos, cluster, summary=summary,
-                                 ind=ind,order=order, oneTable=F,
-                                 maxGap=maxGap, cutoff=cutoff,
-                                 assumeSorted = assumeSorted, verbose = verbose, 
-                                 addMeans = addMeans, mat=mat, design=design, 
-                                 Indexes=Indexes, clusterInSelectedPositions=clusterInSelectedPositions)
-   }
-   
-   bump_directions <- data.frame(matrix(NA, ncol=ncol(x), nrow=nrow(mat)))
-   rownames(bump_directions) <- rownames(mat)
-   all_cpg <- as.data.frame(cbind(CHR=sapply(chr, toString), MAPINFO=pos), stringsAsFactors = F)
-   for (i in 1:ncol(x))
-   {
-     tmp <- regions_separately[[i]]$up
-     if (length(tmp) != 0 & nrow(tmp) != 0)
-     {
-       tmp <- tmp[order(tmp$chr, tmp$start, tmp$end),]
-       cpgs <- find_cpg_in_table(tmp, all_cpg)
-       bump_directions[rownames(bump_directions) %in% paste0("chr",cpgs$CHR, " ", cpgs$MAPINFO),i] <- 1
-     }
-     
-     tmp <- regions_separately[[i]]$dn
-     if (length(tmp) != 0 & nrow(tmp) != 0)
-     {
-       tmp <- tmp[order(tmp$chr, tmp$start, tmp$end),]
-       cpgs <- find_cpg_in_table(tmp, all_cpg)
-       bump_directions[rownames(bump_directions) %in% paste0("chr",cpgs$CHR, " ", cpgs$MAPINFO),i] <- -1
-     }
-   }
-   
-   colnames(bump_directions) <- paste0("direction.case_type", 1:ncol(bump_directions))
-   bump_directions <- cbind(chr, pos, bump_directions)
-   
-   tmp <- regions_jointly
-   tmp <- tmp[order(tmp$chr, tmp$start, tmp$end),]
-   cpgs <- find_cpg_in_table(tmp, all_cpg, region_names=1:nrow(tmp))
-   bump_directions_joint <- cbind(bump_directions[rownames(bump_directions) %in% paste0("chr",cpgs$CHR, " ", cpgs$MAPINFO),], name=cpgs$name)
-   
-   bump_directions_joint.aggregated <- aggregate(bump_directions_joint, by=list(bump_directions_joint$name), FUN=unique)[,-1]
-   for (i in 1:ncol(x))
-   {
-     to_separate <- sapply(bump_directions_joint.aggregated[,paste0("direction.case_type",i)], function(directions)
-         { return (1 %in% x & -1 %in% directions)})
-     if (sum(to_separate) != 0)
-     {
-        #bump_directions_joint.aggregated[to_separate,"name"]
-       stop("Bumps need separation")
-     }
-   }
-   return(regions_jointly)
 }
 
 ##you can pass cutoff through the ...
@@ -415,10 +345,6 @@ find_cpg_in_table <- function(regions, all_cpg, region_names = list(), returnInd
   for (chr in unique(regions$chr))
   {
     current_data <- all_cpg.splitted[[toString(chr)]]
-    if (class(current_data$CHR) == "factor")
-       current_data$CHR <- sapply(current_data$CHR, toString)
-    if (class(current_data$MAPINFO) == "factor")
-        current_data$MAPINFO <- as.numeric(sapply(current_data$MAPINFO, toString))
     current_regions <- regions[regions$chr == chr, ]
     current_region_names <- region_names[regions$chr == chr]
     

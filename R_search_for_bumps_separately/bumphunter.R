@@ -5,9 +5,7 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                    nullMethod=c("permutation","bootstrap"), smooth=FALSE,
                    smoothFunction=locfitByCluster,
                    useWeights=FALSE, B=ncol(permutations), permutations=NULL,
-                   verbose=TRUE, nullmodel_coef=NULL, 
-                   search_on_diff_between_means = T,
-                   computePValuesJointly = F, 
+                   verbose=TRUE, nullmodel_coef=NULL, computePValuesJointly = F, 
                    bumpDirections = NULL, 
                    SamplesToDetermineDirection = NULL, 
                    SamplesContraintedByDistribution = NULL,
@@ -28,7 +26,6 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                                permutations=permutations,
                                verbose=verbose, 
                                nullmodel_coef=nullmodel_coef, 
-                               search_on_diff_between_means = search_on_diff_between_means,
                                computePValuesJointly = computePValuesJointly, 
                                bumpDirections = bumpDirections, 
                                SamplesToDetermineDirection = SamplesToDetermineDirection, 
@@ -51,7 +48,6 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            permutations = NULL,
                            verbose = TRUE, 
                            nullmodel_coef = NULL, 
-                           search_on_diff_between_means = T,
                            computePValuesJointly = F, 
                            bumpDirections = NULL, 
                            SamplesToDetermineDirection = NULL, 
@@ -60,7 +56,6 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            ...){
     nullMethod  <- match.arg(nullMethod)
     
-    set.seed(1991)
     pickCutoff=FALSE
     cluster <- NULL
     Index <- NULL
@@ -129,14 +124,13 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
         message("[bumphunterEngine] Computing coefficients.")
     if (useWeights & smooth) { 
         tmp <- MultiTargetGetEstimate(mat = mat, design = design,
-                            coef = coef, full = TRUE, 
-                            diff_between_means = search_on_diff_between_means)
+                            coef = coef, full = TRUE)
         rawBeta <- tmp$coef
         weights <- tmp$sigma
         rm(tmp)
     } else {
         rawBeta <- MultiTargetGetEstimate(mat = mat, design = design, coef = coef,
-            full = FALSE, diff_between_means = search_on_diff_between_means)
+            full = FALSE)
         weights <- NULL
     }
     if (smooth) {
@@ -159,8 +153,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
           message("[bumphunterEngine] Performing ", B, " permutations with nullmodel coefficients")
 #         if (useWeights && smooth) {
 #           tmp <- MultiTargetGetEstimate(mat, design, coef, B,
-#                                         permutations, full = TRUE,
-#                                         diff_between_means = search_on_diff_between_means)
+#                                         permutations, full = TRUE)
 #           permRawBeta <- tmp$coef
 #           weights <- tmp$sigma
 #           rm(tmp)
@@ -171,8 +164,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
           null_model_matrix <- c(null_model_matrix, nullmodel_coef)
           null_model_matrix <- mat[, null_model_matrix]
 
-          permRawBeta <- MultiTargetGetEstimate(null_model_matrix, design, coef, B, permutations, full = FALSE,
-                                                diff_between_means = search_on_diff_between_means)
+          permRawBeta <- MultiTargetGetEstimate(null_model_matrix, design, coef, B, permutations, full = FALSE)
 
           weights <- NULL
       #}
@@ -183,15 +175,13 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                 message("[bumphunterEngine] Performing ", B, " permutations.")
             if (useWeights && smooth) {
                 tmp <- MultiTargetGetEstimate(mat, design, coef, B,
-                                    permutations, full = TRUE,
-                                    diff_between_means = search_on_diff_between_means)
+                                    permutations, full = TRUE)
                 permRawBeta <- tmp$coef
                 weights <- tmp$sigma
                 rm(tmp)
             }
             else {
-                permRawBeta <- MultiTargetGetEstimate(mat, design, coef, B, permutations, full = FALSE,
-                                                      diff_between_means = search_on_diff_between_means)
+                permRawBeta <- MultiTargetGetEstimate(mat, design, coef, B, permutations, full = FALSE)
                 weights <- NULL
             }
             NullBeta<-permRawBeta	
@@ -269,83 +259,52 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
     } 
     if (verbose)
         message("[bumphunterEngine] Finding regions.")
-    
-    if (computePValuesJointly)
+    tabs <- list()
+    for (j in 1:length(coef))
     {
-      tabs <- regionFinderJointly(x = beta, chr = chr, pos = pos, cluster = cluster,
+      tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
         cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, maxGap=maxGap)
-      
-      if (nrow(tabs) == 0) {
-        if (verbose)
-          message("[bumphunterEngine] No bumps found!")
-        return(list(table = NA, coef = rawBeta, fitted = beta,
-                    pvaluesMarginal = NA))
-      } else {
-        if (verbose)
-          message(sprintf("[bumphunterEngine] Found %s bumps.",
-                          nrow(tabs)))
-      }
-    } else {
-      tabs <- list()
-      for (j in 1:length(coef))
-      {
-        tabs[[j]] <- regionFinder(x = beta[,j], chr = chr, pos = pos, cluster = cluster,
-          cutoff = cutoff, ind = Index, verbose = FALSE, addMeans = T, mat=mat, design=design, maxGap=maxGap)
         
-        if (nrow(tabs[[j]]) == 0) {
+      if (nrow(tabs[[j]]) == 0) {
           if (verbose)
-            message("[bumphunterEngine] No bumps found!")
+              message("[bumphunterEngine] No bumps found!")
           return(list(table = NA, coef = rawBeta, fitted = beta,
-                      pvaluesMarginal = NA))
-        } else {
+              pvaluesMarginal = NA))
+      } else {
           if (verbose)
-            message(sprintf("[bumphunterEngine] Found %s bumps.",
-                            nrow(tabs[[j]])))
-        }
+              message(sprintf("[bumphunterEngine] Found %s bumps.",
+                  nrow(tabs[[j]])))
       }
+    
+      #if (B < 1) {
+      #    return(list(table = tabs[[j]], coef = rawBeta, fitted = beta,
+      #        pvaluesMarginal = NA))
+      #}
     }
-  
-#     if (B < 1)
-#         return(list(table = tabs, coef = rawBeta, fitted = beta,
-#             pvaluesMarginal = NA))
-
     if (verbose)
         message("[bumphunterEngine] Computing regions for each ",nullMethod,".")
-
-    permBeta.list <- list()
-    for (i in 1:B)
-    {
-      permBeta.list[[i]] <- permBeta[,(i-1)*length(coef) + 1:length(coef)]
-    }
-
+    chunksize <- ceiling(B * length(coef)/workers)
     subMat <- NULL
     
     ptime2 <- proc.time()
-    nulltabs <- foreach(subMat = permBeta.list, .combine = "c") %dorng% {
+    nulltabs <- foreach(subMat = iter(permBeta, by = "col", chunksize = chunksize),
+          .combine = "c") %dorng% {
             
           source("bumphunter/R/regionFinder.R")
           source("bumphunter/R/utils.R")
           
-          if (computePValuesJointly)
-          {
-            list(regionFinderJointly(subMat, chr = chr, pos = pos,
-                  cluster = cluster, cutoff = cutoff/2, ind = Index,
-                  verbose = FALSE,  addMeans = T, mat=mat, design=design, maxGap=maxGap))
-          } else {
-            apply(subMat, 2, regionFinder, chr = chr, pos = pos,
-                  cluster = cluster, cutoff = cutoff, ind = Index,
-                  verbose = FALSE,  addMeans = T, mat=mat, design=design, maxGap=maxGap)
-          }
+          apply(subMat, 2, regionFinder, chr = chr, pos = pos,
+              cluster = cluster, cutoff = cutoff, ind = Index,
+              verbose = FALSE,  addMeans = T, mat=mat, design=design, maxGap=maxGap)
       }
-    attributes(nulltabs)[["rng"]] <- NULL
+    attributes(nulltabs[[j]])[["rng"]] <- NULL
     
     print(proc.time()-ptime2)
 
     if (verbose)
         message("[bumphunterEngine] Estimating p-values and FWER.")
-    nullmodel_size <- ifelse(computePValuesJointly, B, B*length(coef))
-    D <- L <- V <- A <- as.list(rep(0, nullmodel_size))
-    for (i in 1:nullmodel_size) {
+    D <- L <- V <- A <- as.list(rep(0, B * length(coef)))
+    for (i in 1:(B * length(coef))) {
         nulltab <- nulltabs[[i]]
         current_coef <- if (i %% length(coef) == 0) length(coef) else (i %% length(coef))
         
