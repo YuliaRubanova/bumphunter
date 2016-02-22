@@ -100,7 +100,8 @@ computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, be
                                      nulltabs, coef,
                                      verbose = F, 
                                      bumpDirections = NULL, SamplesToDetermineDirection = NULL,
-                                     SamplesContraintedByDistribution = NULL, distribution = NULL) {
+                                     SamplesContraintedByDistribution = NULL, distribution = NULL,
+                                     ks.threshold = NULL) {
   if (verbose)
     message("[bumphunterEngine] Joining bumps.")
   
@@ -128,7 +129,10 @@ computation.tots.jointly <- function(tabs, V, L, A, D, maxGap, chr, pos, mat, be
                    }
     attributes(controls_come_from_distribution.distances)[["rng"]] <- NULL
     
-    controls_come_from_distribution <- (controls_come_from_distribution.distances < 0.79625)
+    if (is.null(ks.threshold))
+      ks.threshold <- quantile(controls_come_from_distribution.distances)[2]
+    
+    controls_come_from_distribution <- (controls_come_from_distribution.distances < ks.threshold)
     if (verbose)
       print(proc.time() - ptime1)
   }

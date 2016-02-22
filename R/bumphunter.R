@@ -12,6 +12,7 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                    SamplesToDetermineDirection = NULL, 
                    SamplesContraintedByDistribution = NULL,
                    distribution = NULL,
+                   ks.threshold = NULL,
                    ...){
               nullMethod  <- match.arg(nullMethod)
               if(missing(design)) stop("design must be specified")
@@ -34,6 +35,7 @@ setMethod("MultiTargetBumphunter", signature(object = "matrix"),
                                SamplesToDetermineDirection = SamplesToDetermineDirection, 
                                SamplesContraintedByDistribution = SamplesContraintedByDistribution,
                                distribution = distribution,
+                               ks.threshold = ks.threshold,
                                ...)
           })
 
@@ -57,6 +59,7 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
                            SamplesToDetermineDirection = NULL, 
                            SamplesContraintedByDistribution = NULL,
                            distribution = NULL,
+                           ks.threshold = NULL,
                            ...){
     nullMethod  <- match.arg(nullMethod)
     
@@ -377,7 +380,8 @@ MultiTargetBumphunterEngine<-function(mat, design, chr = NULL, pos,
          workers = workers, nulltabs = nulltabs, coef=coef,
          verbose = verbose,
          bumpDirections, SamplesToDetermineDirection,
-         SamplesContraintedByDistribution, distribution)
+         SamplesContraintedByDistribution, distribution,
+         ks.threshold)
       if (verbose)
       {
         message("[bumphunterEngine] Total time for computation:")
